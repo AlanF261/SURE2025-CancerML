@@ -54,17 +54,6 @@ def symmetrize(x):
     return x + x.transpose(-1, -2)
 
 
-# def average_product_correct(x):
-#     "Perform average product correct, used for contact prediction."
-#     a1 = x.sum(-1, keepdims=True)
-#     a2 = x.sum(-2, keepdims=True)
-#     a12 = x.sum((-1, -2), keepdims=True)
-#
-#     avg = a1 * a2
-#     avg.div_(a12)  # in-place to reduce memory
-#     normalized = x - avg
-#     return normalized
-
 
 class RotaryEmbedding(torch.nn.Module):
 
@@ -127,10 +116,7 @@ class Embeddings(nn.Module):
         else:
             self.layer_norm = None
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        # self.position_embedding_type = getattr(
-        #     config, "position_embedding_type", "absolute"
-        # )
+
         self.register_buffer(
             "position_ids",
             torch.arange(config.max_position_embeddings).expand((1, -1)),
@@ -187,9 +173,7 @@ class Embeddings(nn.Module):
                     / (1 - mask_ratio_observed)[:, None, None]
             ).to(embeddings.dtype)
 
-        # if self.position_embedding_type == "absolute":
-        #     position_embeddings = self.position_embeddings(position_ids)
-        #     embeddings += position_embeddings
+
 
         methylation_embeddings = self.methylation_embeddings(methylation_ids)
         embeddings += methylation_embeddings
@@ -200,8 +184,7 @@ class Embeddings(nn.Module):
             embeddings = (embeddings * attention_mask.unsqueeze(-1)).to(
                 embeddings.dtype
             )
-        # Matt: I think this line was copied incorrectly from BERT, disabling it for now.
-        # embeddings = self.dropout(embeddings)
+
         return embeddings
 
     def create_methylation_ids_from_inputs_embeds(self, inputs_embeds):
@@ -215,8 +198,7 @@ class Embeddings(nn.Module):
         sequence_length = input_shape[1]
 
         methylation_ids = torch.arange(
-            # self.padding_idx + 1,
-            # sequence_length + self.padding_idx + 1,
+
             1,
             sequence_length + 1,
             dtype=torch.long,
@@ -705,58 +687,8 @@ class PreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
 
-# ESM_START_DOCSTRING = r"""
-#     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-#     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-#     etc.)
-#     This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-#     Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-#     and behavior.
-#     Parameters:
-#         config ([`EsmConfig`]): Model configuration class with all the parameters of the
-#             model. Initializing with a config file does not load the weights associated with the model, only the
-#             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-# """
-#
-# ESM_INPUTS_DOCSTRING = r"""
-#     Args:
-#         input_ids (`torch.LongTensor` of shape `({0})`):
-#             Indices of input sequence tokens in the vocabulary.
-#             Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-#             [`PreTrainedTokenizer.__call__`] for details.
-#             [What are input IDs?](../glossary#input-ids)
-#         attention_mask (`torch.FloatTensor` of shape `({0})`, *optional*):
-#             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-#             - 1 for tokens that are **not masked**,
-#             - 0 for tokens that are **masked**.
-#             [What are attention masks?](../glossary#attention-mask)
-#         position_ids (`torch.LongTensor` of shape `({0})`, *optional*):
-#             Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
-#             config.max_position_embeddings - 1]`.
-#             [What are position IDs?](../glossary#position-ids)
-#         head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
-#             Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
-#             - 1 indicates the head is **not masked**,
-#             - 0 indicates the head is **masked**.
-#         inputs_embeds (`torch.FloatTensor` of shape `({0}, hidden_size)`, *optional*):
-#             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
-#             is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
-#             model's internal embedding lookup matrix.
-#         output_attentions (`bool`, *optional*):
-#             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-#             tensors for more detail.
-#         output_hidden_states (`bool`, *optional*):
-#             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-#             more detail.
-#         return_dict (`bool`, *optional*):
-#             Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
-# """
 
 
-# @add_start_docstrings(
-#     "The bare ESM Model transformer outputting raw hidden-states without any specific head on top.",
-#     ESM_START_DOCSTRING,
-# )
 class Model(PreTrainedModel):
     """
     The model can behave as an encoder (with only self-attention) as well as a decoder, in which case a layer of
@@ -779,11 +711,6 @@ class Model(PreTrainedModel):
 
         self.pooler = Pooler(config) if add_pooling_layer else None
 
-        # self.contact_head = EsmContactPredictionHead(
-        #     in_features=config.num_hidden_layers * config.num_attention_heads, bias=True
-        # )
-
-        # Initialize weights and apply final processing
         self.post_init()
 
     def _set_gradient_checkpointing(self, module, value=False):
@@ -804,14 +731,6 @@ class Model(PreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    # @add_start_docstrings_to_model_forward(
-    #     ESM_INPUTS_DOCSTRING.format("(batch_size, sequence_length)")
-    # )
-    # @add_code_sample_docstrings(
-    #     checkpoint=_CHECKPOINT_FOR_DOC,
-    #     output_type=BaseModelOutputWithPoolingAndCrossAttentions,
-    #     config_class=_CONFIG_FOR_DOC,
-    # )
     def forward(
             self,
             input_ids: Optional[torch.Tensor] = None,
@@ -954,124 +873,6 @@ class Model(PreTrainedModel):
             cross_attentions=encoder_outputs.cross_attentions,
         )
 
-    # def predict_contacts(self, tokens, attention_mask):
-    #     attns = self(
-    #         tokens,
-    #         attention_mask=attention_mask,
-    #         return_dict=True,
-    #         output_attentions=True,
-    #     ).attentions
-    #     attns = torch.stack(attns, dim=1)  # Matches the original model layout
-    #     # In the original model, attentions for padding tokens are completely zeroed out.
-    #     # This makes no difference most of the time because the other tokens won't attend to them,
-    #     # but it does for the contact prediction task, which takes attentions as input,
-    #     # so we have to mimic that here.
-    #     attns *= attention_mask.unsqueeze(1).unsqueeze(2).unsqueeze(3)
-    #     attns *= attention_mask.unsqueeze(1).unsqueeze(2).unsqueeze(4)
-    #     return self.contact_head(tokens, attns)
-
-
-# @add_start_docstrings(
-#     """ESM Model with a `language modeling` head on top.""", ESM_START_DOCSTRING
-# )
-# class ForMaskedLM(PreTrainedModel):
-#     _tied_weights_keys = ["lm_head.decoder.weight"]
-#
-#     def __init__(self, config):
-#         super().__init__(config)
-#
-#         if config.is_decoder:
-#             logger.warning(
-#                 "If you want to use `EsmForMaskedLM` make sure `config.is_decoder=False` for "
-#                 "bi-directional self-attention."
-#             )
-#
-#         self.esm = Model(config, add_pooling_layer=False)
-#         self.lm_head = EsmLMHead(config)
-#
-#         self.init_weights()
-#
-#     def get_output_embeddings(self):
-#         return self.lm_head.decoder
-#
-#     def set_output_embeddings(self, new_embeddings):
-#         self.lm_head.decoder = new_embeddings
-#
-#     # @add_start_docstrings_to_model_forward(
-#     #     ESM_INPUTS_DOCSTRING.format("batch_size, sequence_length")
-#     # )
-#     # @add_code_sample_docstrings(
-#     #     checkpoint=_CHECKPOINT_FOR_DOC,
-#     #     output_type=MaskedLMOutput,
-#     #     config_class=_CONFIG_FOR_DOC,
-#     #     mask="<mask>",
-#     # )
-#     def forward(
-#             self,
-#             input_ids: Optional[torch.LongTensor] = None,
-#             attention_mask: Optional[torch.Tensor] = None,
-#             position_ids: Optional[torch.LongTensor] = None,
-#             head_mask: Optional[torch.Tensor] = None,
-#             inputs_embeds: Optional[torch.FloatTensor] = None,
-#             encoder_hidden_states: Optional[torch.FloatTensor] = None,
-#             encoder_attention_mask: Optional[torch.Tensor] = None,
-#             labels: Optional[torch.LongTensor] = None,
-#             output_attentions: Optional[bool] = None,
-#             output_hidden_states: Optional[bool] = None,
-#             return_dict: Optional[bool] = None,
-#     ) -> Union[Tuple, MaskedLMOutput]:
-#         r"""
-#         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-#             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
-#             config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
-#             loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
-#         kwargs (`Dict[str, any]`, optional, defaults to *{}*):
-#             Used to hide legacy arguments that have been deprecated.
-#         """
-#         return_dict = (
-#             return_dict if return_dict is not None else self.config.use_return_dict
-#         )
-#
-#         outputs = self.esm(
-#             input_ids,
-#             attention_mask=attention_mask,
-#             position_ids=position_ids,
-#             head_mask=head_mask,
-#             inputs_embeds=inputs_embeds,
-#             encoder_hidden_states=encoder_hidden_states,
-#             encoder_attention_mask=encoder_attention_mask,
-#             output_attentions=output_attentions,
-#             output_hidden_states=output_hidden_states,
-#             return_dict=return_dict,
-#         )
-#         sequence_output = outputs[0]
-#         prediction_scores = self.lm_head(sequence_output)
-#
-#         masked_lm_loss = None
-#         if labels is not None:
-#             loss_fct = CrossEntropyLoss()
-#
-#             labels = labels.to(prediction_scores.device)
-#             masked_lm_loss = loss_fct(
-#                 prediction_scores.view(-1, self.config.vocab_size), labels.view(-1)
-#             )
-#
-#         if not return_dict:
-#             output = (prediction_scores,) + outputs[2:]
-#             return (
-#                 ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
-#             )
-#
-#         return MaskedLMOutput(
-#             loss=masked_lm_loss,
-#             logits=prediction_scores,
-#             hidden_states=outputs.hidden_states,
-#             attentions=outputs.attentions,
-#         )
-#
-#     def predict_contacts(self, tokens, attention_mask):
-#         return self.esm.predict_contacts(tokens, attention_mask=attention_mask)
-
 
 class EsmLMHead(nn.Module):
     """ESM Head for masked language modeling."""
@@ -1094,13 +895,6 @@ class EsmLMHead(nn.Module):
         return x
 
 
-# @add_start_docstrings(
-#     """
-#     ESM Model transformer with a sequence classification/regression head on top (a linear layer on top of the pooled
-#     output) e.g. for GLUE tasks.
-#     """,
-#     ESM_START_DOCSTRING,
-# )
 class ForSequenceClassification(PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1112,14 +906,7 @@ class ForSequenceClassification(PreTrainedModel):
 
         self.init_weights()
 
-    # @add_start_docstrings_to_model_forward(
-    #     ESM_INPUTS_DOCSTRING.format("batch_size, sequence_length")
-    # )
-    # @add_code_sample_docstrings(
-    #     checkpoint=_CHECKPOINT_FOR_DOC,
-    #     output_type=SequenceClassifierOutput,
-    #     config_class=_CONFIG_FOR_DOC,
-    # )
+
     def forward(
             self,
             input_ids: Optional[torch.LongTensor] = None,
@@ -1194,85 +981,6 @@ class ForSequenceClassification(PreTrainedModel):
         )
 
 
-# @add_start_docstrings(
-#     """
-#     ESM Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g. for
-#     Named-Entity-Recognition (NER) tasks.
-#     """,
-#     ESM_START_DOCSTRING,
-# )
-# class ForTokenClassification(PreTrainedModel):
-#     def __init__(self, config):
-#         super().__init__(config)
-#         self.num_labels = config.num_labels
-#
-#         self.esm = Model(config, add_pooling_layer=False)
-#         self.dropout = nn.Dropout(config.hidden_dropout_prob)
-#         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
-#
-#         self.init_weights()
-#
-#     @add_start_docstrings_to_model_forward(
-#         ESM_INPUTS_DOCSTRING.format("batch_size, sequence_length")
-#     )
-#     @add_code_sample_docstrings(
-#         checkpoint=_CHECKPOINT_FOR_DOC,
-#         output_type=TokenClassifierOutput,
-#         config_class=_CONFIG_FOR_DOC,
-#     )
-#     def forward(
-#             self,
-#             input_ids: Optional[torch.LongTensor] = None,
-#             attention_mask: Optional[torch.Tensor] = None,
-#             position_ids: Optional[torch.LongTensor] = None,
-#             head_mask: Optional[torch.Tensor] = None,
-#             inputs_embeds: Optional[torch.FloatTensor] = None,
-#             labels: Optional[torch.LongTensor] = None,
-#             output_attentions: Optional[bool] = None,
-#             output_hidden_states: Optional[bool] = None,
-#             return_dict: Optional[bool] = None,
-#     ) -> Union[Tuple, TokenClassifierOutput]:
-#         r"""
-#         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-#             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
-#         """
-#         return_dict = (
-#             return_dict if return_dict is not None else self.config.use_return_dict
-#         )
-#
-#         outputs = self.esm(
-#             input_ids,
-#             attention_mask=attention_mask,
-#             position_ids=position_ids,
-#             head_mask=head_mask,
-#             inputs_embeds=inputs_embeds,
-#             output_attentions=output_attentions,
-#             output_hidden_states=output_hidden_states,
-#             return_dict=return_dict,
-#         )
-#
-#         sequence_output = outputs[0]
-#
-#         sequence_output = self.dropout(sequence_output)
-#         logits = self.classifier(sequence_output)
-#
-#         loss = None
-#         if labels is not None:
-#             loss_fct = CrossEntropyLoss()
-#
-#             labels = labels.to(logits.device)
-#             loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-#
-#         if not return_dict:
-#             output = (logits,) + outputs[2:]
-#             return ((loss,) + output) if loss is not None else output
-#
-#         return TokenClassifierOutput(
-#             loss=loss,
-#             logits=logits,
-#             hidden_states=outputs.hidden_states,
-#             attentions=outputs.attentions,
-#         )
 
 
 class ClassificationHead(nn.Module):
@@ -1293,20 +1001,3 @@ class ClassificationHead(nn.Module):
         x = self.out_proj(x)
         return x
 
-
-# def create_position_ids_from_input_ids(
-#         input_ids, padding_idx, past_key_values_length=0
-# ):
-#     """
-#     Replace non-padding symbols with their position numbers. Position numbers begin at padding_idx+1. Padding symbols
-#     are ignored. This is modified from fairseq's `utils.make_positions`.
-#     Args:
-#         x: torch.Tensor x:
-#     Returns: torch.Tensor
-#     """
-#     # The series of casts and type-conversions here are carefully balanced to both work with ONNX export and XLA.
-#     mask = input_ids.ne(padding_idx).int()
-#     incremental_indices = (
-#                                   torch.cumsum(mask, dim=1).type_as(mask) + past_key_values_length
-#                           ) * mask
-#     return incremental_indices.long() + padding_idx
