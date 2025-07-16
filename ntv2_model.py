@@ -7,6 +7,7 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss, SiLU
+import torch.nn.functional as nnFunc
 from transformers.file_utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
@@ -132,6 +133,7 @@ class Embeddings(nn.Module):
         self.token_dropout = config.token_dropout
         self.mask_token_id = config.mask_token_id
 
+
     def forward(
             self,
             input_ids=None,
@@ -162,7 +164,7 @@ class Embeddings(nn.Module):
             )
             mask_ratio_train = (
                     0.15 * 0.8
-            )  # Hardcoded as the ratio used in all ESM model training runs
+            )  # Replace the hardcoding with modifications to config
             src_lengths = attention_mask.sum(-1)
             mask_ratio_observed = (input_ids == self.mask_token_id).sum(
                 -1
@@ -221,10 +223,11 @@ class AttentionCalculation(nn.Module):
         self.num_attention_heads = config.num_attention_heads
         self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
+        self.hidden_size = config.hidden_size
 
-        self.query = nn.Linear(config.hidden_size, self.all_head_size)
-        self.key = nn.Linear(config.hidden_size, self.all_head_size)
-        self.value = nn.Linear(config.hidden_size, self.all_head_size)
+        self.query = nn.Linear(self.hidden_size, self.all_head_size)
+        self.key = nn.Linear(self.hidden_size, self.all_head_size)
+        self.value = nn.Linear(self.hidden_size, self.all_head_size)
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
         self.position_embedding_type = position_embedding_type or getattr(
@@ -236,13 +239,13 @@ class AttentionCalculation(nn.Module):
 
         self.is_decoder = config.is_decoder
 
-    def transpose_for_scores(self, x: torch.Tensor) -> torch.Tensor:
-        new_x_shape = x.size()[:-1] + (
-            self.num_attention_heads,
-            self.attention_head_size,
-        )
-        x = x.view(new_x_shape)
-        return x.permute(0, 2, 1, 3)
+    # def transpose_for_scores(self, x: torch.Tensor) -> torch.Tensor:
+    #     new_x_shape = x.size()[:-1] + (
+    #         self.num_attention_heads,
+    #         self.attention_head_size,
+    #     )
+    #     x = x.view(new_x_shape)
+    #     return x.permute(0, 2, 1, 3)
 
     def forward(
             self,
@@ -252,7 +255,6 @@ class AttentionCalculation(nn.Module):
             encoder_hidden_states: Optional[torch.FloatTensor] = None,
             encoder_attention_mask: Optional[torch.FloatTensor] = None,
             past_key_value: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
-            output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.Tensor]:
         mixed_query_layer = self.query(hidden_states)
 
@@ -298,32 +300,51 @@ class AttentionCalculation(nn.Module):
             query_layer, key_layer = self.rotary_embeddings(query_layer, key_layer)
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
-        attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
+        # attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
+        #
+        # if attention_mask is not None:
+        #     # Ap
+        #     # ply the attention mask is (precomputed for all layers in EsmModel forward() function)
+        #     attention_scores = attention_scores + attention_mask
+        #
+        # # Normalize the attention scores to probabilities.
+        # attention_probs = nn.functional.softmax(attention_scores, dim=-1)
+        #
+        # # This is actually dropping out entire tokens to attend to, which might
+        # # seem a bit unusual, but is taken from the original Transformer paper.
+        # attention_probs = self.dropout(attention_probs)
+        #
+        # # Mask heads if we want to
+        # if head_mask is not None:
+        #     attention_probs = attention_probs * head_mask
+        #
+        # context_layer = torch.matmul(attention_probs, value_layer)
+        #
+        # context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
+        # new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
+        # context_layer = context_layer.view(new_context_layer_shape)
 
-        if attention_mask is not None:
-            # Ap
-            # ply the attention mask is (precomputed for all layers in EsmModel forward() function)
-            attention_scores = attention_scores + attention_mask
 
-        # Normalize the attention scores to probabilities.
-        attention_probs = nn.functional.softmax(attention_scores, dim=-1)
-
-        # This is actually dropping out entire tokens to attend to, which might
-        # seem a bit unusual, but is taken from the original Transformer paper.
-        attention_probs = self.dropout(attention_probs)
-
-        # Mask heads if we want to
-        if head_mask is not None:
-            attention_probs = attention_probs * head_mask
-
-        context_layer = torch.matmul(attention_probs, value_layer)
-
+        context_layer = nnFunc.scaled_dot_product_attention(
+            query_layer,
+            key_layer,
+            value_layer,
+            attn_mask=attention_mask,
+            dropout_p=self.dropout.p,
+            is_causal=False
+        )# Replacing manual attention calculation with torch.nn.functional.scaled_dot_product_attention
+        # to potentially use flash attention if optimal, sigificantly improving performance
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
         context_layer = context_layer.view(new_context_layer_shape)
 
+        if head_mask is not None:
+            context_layer_reshaped = context_layer.view(context_layer.size()[:-1] + (self.num_attention_heads, self.attention_head_size)).permute(0, 2, 1, 3)
+            context_layer_reshaped = context_layer_reshaped * head_mask
+            context_layer = context_layer_reshaped.permute(0, 2, 1, 3).contiguous().view(new_context_layer_shape)
+
         outputs = (
-            (context_layer, attention_probs) if output_attentions else (context_layer,)
+            (context_layer)
         )
 
         if self.is_decoder:
