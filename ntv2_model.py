@@ -27,7 +27,7 @@ from transformers.modeling_utils import (
 )
 from transformers.utils import logging
 
-from config.py import Config
+from esmconfig.py import Config
 
 logger = logging.get_logger(__name__)
 
@@ -251,7 +251,7 @@ class AttentionCalculation(nn.Module):
             self,
             hidden_states: torch.Tensor,
             attention_mask: Optional[torch.FloatTensor] = None,
-            head_mask: Optional[torch.FloatTensor] = None,
+            # head_mask: Optional[torch.FloatTensor] = None,
             encoder_hidden_states: Optional[torch.FloatTensor] = None,
             encoder_attention_mask: Optional[torch.FloatTensor] = None,
             past_key_value: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
@@ -338,10 +338,10 @@ class AttentionCalculation(nn.Module):
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
         context_layer = context_layer.view(new_context_layer_shape)
 
-        if head_mask is not None:
-            context_layer_reshaped = context_layer.view(context_layer.size()[:-1] + (self.num_attention_heads, self.attention_head_size)).permute(0, 2, 1, 3)
-            context_layer_reshaped = context_layer_reshaped * head_mask
-            context_layer = context_layer_reshaped.permute(0, 2, 1, 3).contiguous().view(new_context_layer_shape)
+        # if head_mask is not None:
+        #     context_layer_reshaped = context_layer.view(context_layer.size()[:-1] + (self.num_attention_heads, self.attention_head_size)).permute(0, 2, 1, 3)
+        #     context_layer_reshaped = context_layer_reshaped * head_mask
+        #     context_layer = context_layer_reshaped.permute(0, 2, 1, 3).contiguous().view(new_context_layer_shape)
 
         outputs = (
             (context_layer)
