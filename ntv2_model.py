@@ -6,7 +6,8 @@ from typing import List, Optional, Tuple, Union
 import torch
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss, SiLU
+# from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss, SiLU
+from torch.nn import CrossEntropyLoss, SiLU
 import torch.nn.functional as nnFunc
 # from transformers.file_utils import (
 #     add_code_sample_docstrings,
@@ -17,8 +18,8 @@ from transformers.modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     BaseModelOutputWithPoolingAndCrossAttentions,
     MaskedLMOutput,
-    SequenceClassifierOutput,
-    TokenClassifierOutput,
+    # SequenceClassifierOutput,
+    # TokenClassifierOutput,
 )
 from transformers.modeling_utils import (
     PreTrainedModel,
@@ -203,6 +204,7 @@ class AttentionCalculation(nn.Module):
         self.value = nn.Linear(self.hidden_size, self.all_head_size)
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
+        self.dropout.p = 0
         self.position_embedding_type = position_embedding_type or getattr(
             config, "position_embedding_type", "absolute"
         )
@@ -303,7 +305,7 @@ class AttentionCalculation(nn.Module):
             key_layer,
             value_layer,
             attn_mask=attention_mask,
-            dropout_p=0,
+            dropout_p=self.dropout.p,
             is_causal=False
         )# Replacing manual attention calculation with torch.nn.functional.scaled_dot_product_attention
         # to potentially use flash attention if optimal, sigificantly improving performance
@@ -902,18 +904,33 @@ class HierarchicalGenomeTransformer(PreTrainedModel):
 
             current_segment_input_ids = input_ids[:, start_idx:end_idx]
             current_segment_attention_mask = attention_mask[:, start_idx:end_idx]
+            current_segment_methylation_ids = methylation_ids[:, start_idx:end_idx]
 
+            # if current_segment_input_ids.shape[1] < self.segment_length:
+            #     padding_length = self.segment_length - current_segment_input_ids.shape[1]
+            #     current_segment_input_ids = torch.cat([
+            #         current_segment_input_ids,
+            #         torch.full((batch_size, padding_length), self.config.pad_token_id, dtype=torch.long, device=input_ids.device)
+            #     ], dim=1)
+            #     current_segment_attention_mask = torch.cat([
+            #         current_segment_attention_mask,
+            #         torch.zeros((batch_size, padding_length), dtype=torch.long, device=attention_mask.device)
+            #     ], dim=1)
             if current_segment_input_ids.shape[1] < self.segment_length:
                 padding_length = self.segment_length - current_segment_input_ids.shape[1]
+                # Pad input_ids, attention_mask, and methylation_ids
                 current_segment_input_ids = torch.cat([
                     current_segment_input_ids,
-                    torch.full((batch_size, padding_length), self.config.pad_token_id, dtype=torch.long, device=input_ids.device)
+                    torch.full((batch_size, padding_length), self.config_lower.pad_token_id, dtype=torch.long, device=input_ids.device)
                 ], dim=1)
                 current_segment_attention_mask = torch.cat([
                     current_segment_attention_mask,
                     torch.zeros((batch_size, padding_length), dtype=torch.long, device=attention_mask.device)
                 ], dim=1)
-
+                current_segment_methylation_ids = torch.cat([ # <--- PAD METHYLATION_IDS
+                    current_segment_methylation_ids,
+                    torch.full((batch_size, padding_length), self.config_lower.pad_token_id, dtype=torch.long, device=methylation_ids.device) # Assuming pad_token_id is suitable for methylation as well
+                ], dim=1)
 
             lower_layer_output = self.lower_layer_transformer(
                 input_ids=current_segment_input_ids,
