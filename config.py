@@ -1,6 +1,6 @@
 #Taken from Nucleotide Transformer v2 with modifications
 
-from transformers import PretrainedConfig, logging
+from transformers import PretrainedConfig
 
 class Config(PretrainedConfig):
 
@@ -25,9 +25,11 @@ class Config(PretrainedConfig):
             emb_layer_norm_before=None,
             token_dropout=False,
             is_folding_model=False,
-            esmfold_config=None,
             vocab_list=None,
             add_bias_fnn=True,
+            segment_length = 11500,
+            segment_stride = 0,
+            max_methylation_embeddings = 131070,
             **kwargs,
     ):
         super().__init__(
@@ -49,3 +51,5 @@ class Config(PretrainedConfig):
         self.emb_layer_norm_before = emb_layer_norm_before
         self.token_dropout = token_dropout
         self.is_folding_model = is_folding_model
+        self.segment_length = segment_length
+        self.segment_stride = segment_stride

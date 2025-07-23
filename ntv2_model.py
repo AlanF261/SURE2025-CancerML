@@ -8,11 +8,11 @@ import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss, SiLU
 import torch.nn.functional as nnFunc
-from transformers.file_utils import (
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-)
+# from transformers.file_utils import (
+#     add_code_sample_docstrings,
+#     add_start_docstrings,
+#     add_start_docstrings_to_model_forward,
+# )
 from transformers.modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     BaseModelOutputWithPoolingAndCrossAttentions,
@@ -27,7 +27,7 @@ from transformers.modeling_utils import (
 )
 from transformers.utils import logging
 
-from esmconfig.py import Config
+from .config import Config
 
 logger = logging.get_logger(__name__)
 
@@ -100,9 +100,6 @@ class RotaryEmbedding(torch.nn.Module):
 
 
 class Embeddings(nn.Module):
-    """
-    Same as BertEmbeddings with a tiny tweak for positional embeddings indexing.
-    """
 
     def __init__(self, config):
         super().__init__()
@@ -118,11 +115,11 @@ class Embeddings(nn.Module):
             self.layer_norm = None
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-        self.register_buffer(
-            "position_ids",
-            torch.arange(config.max_position_embeddings).expand((1, -1)),
-            persistent=False,
-        )
+        # self.register_buffer(
+        #     "position_ids",
+        #     torch.arange(config.max_position_embeddings).expand((1, -1)),
+        #     persistent=False,
+        # )
 
         self.padding_idx = config.pad_token_id
         self.methylation_embeddings = nn.Embedding(
@@ -142,19 +139,14 @@ class Embeddings(nn.Module):
             inputs_embeds=None,
             past_key_values_length=0,
     ):
-        if methylation_ids is None:
-            # if input_ids is not None:
-            #     # Create the position ids from the input token ids. Any padded tokens remain padded.
-            #     methylation_ids = create_position_ids_from_input_ids(
-            #         input_ids, self.padding_idx, past_key_values_length
-            #     )
-            # else:
-                methylation_ids = self.create_methylation_ids_from_inputs_embeds(
-                    inputs_embeds
-                )
 
         if inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_ids)
+
+        if methylation_ids is None:
+            raise ValueError(
+                "methylation_ids must be provided."
+            )
 
         embeddings = inputs_embeds
 
@@ -189,25 +181,6 @@ class Embeddings(nn.Module):
 
         return embeddings
 
-    def create_methylation_ids_from_inputs_embeds(self, inputs_embeds):
-        """
-        We are provided embeddings directly. We generate sequential ids.
-        Args:
-            inputs_embeds: torch.Tensor
-        Returns: torch.Tensor
-        """
-        input_shape = inputs_embeds.size()[:-1]
-        sequence_length = input_shape[1]
-
-        methylation_ids = torch.arange(
-
-            1,
-            sequence_length + 1,
-            dtype=torch.long,
-            device=inputs_embeds.device,
-            )
-        return methylation_ids.unsqueeze(0).expand(input_shape)
-
 
 class AttentionCalculation(nn.Module):
     def __init__(self, config, position_embedding_type=None):
@@ -239,13 +212,13 @@ class AttentionCalculation(nn.Module):
 
         self.is_decoder = config.is_decoder
 
-    # def transpose_for_scores(self, x: torch.Tensor) -> torch.Tensor:
-    #     new_x_shape = x.size()[:-1] + (
-    #         self.num_attention_heads,
-    #         self.attention_head_size,
-    #     )
-    #     x = x.view(new_x_shape)
-    #     return x.permute(0, 2, 1, 3)
+    def transpose_for_scores(self, x: torch.Tensor) -> torch.Tensor:
+        new_x_shape = x.size()[:-1] + (
+            self.num_attention_heads,
+            self.attention_head_size,
+        )
+        x = x.view(new_x_shape)
+        return x.permute(0, 2, 1, 3)
 
     def forward(
             self,
@@ -255,7 +228,7 @@ class AttentionCalculation(nn.Module):
             encoder_hidden_states: Optional[torch.FloatTensor] = None,
             encoder_attention_mask: Optional[torch.FloatTensor] = None,
             past_key_value: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
-    ) -> Tuple[torch.Tensor]:
+    ): # -> Tuple[torch.Tensor]
         mixed_query_layer = self.query(hidden_states)
 
         # If this is instantiated as a cross-attention module, the keys
@@ -330,7 +303,7 @@ class AttentionCalculation(nn.Module):
             key_layer,
             value_layer,
             attn_mask=attention_mask,
-            dropout_p=self.dropout.p,
+            dropout_p=0,
             is_causal=False
         )# Replacing manual attention calculation with torch.nn.functional.scaled_dot_product_attention
         # to potentially use flash attention if optimal, sigificantly improving performance
@@ -343,12 +316,11 @@ class AttentionCalculation(nn.Module):
         #     context_layer_reshaped = context_layer_reshaped * head_mask
         #     context_layer = context_layer_reshaped.permute(0, 2, 1, 3).contiguous().view(new_context_layer_shape)
 
-        outputs = (
-            (context_layer)
-        )
+        outputs = (context_layer)
 
-        if self.is_decoder:
-            outputs = outputs + (past_key_value,)
+
+        # if self.is_decoder:
+        #     outputs = outputs + (past_key_value,)
         return outputs
 
 
@@ -400,21 +372,21 @@ class AttentionMain(nn.Module):
             self,
             hidden_states,
             attention_mask=None,
-            head_mask=None,
+            # head_mask=None,
             encoder_hidden_states=None,
             encoder_attention_mask=None,
             past_key_value=None,
-            output_attentions=False,
+            # output_attentions=False,
     ):
         hidden_states_ln = self.LayerNorm(hidden_states)
         self_outputs = self.self(
             hidden_states_ln,
             attention_mask,
-            head_mask,
+            # head_mask,
             encoder_hidden_states,
             encoder_attention_mask,
             past_key_value,
-            output_attentions,
+            # output_attentions,
         )
         attention_output = self.output(self_outputs[0], hidden_states)
         outputs = (attention_output,) + self_outputs[
@@ -481,11 +453,11 @@ class Layer(nn.Module):
             self,
             hidden_states,
             attention_mask=None,
-            head_mask=None,
+            # head_mask=None,
             encoder_hidden_states=None,
             encoder_attention_mask=None,
             past_key_value=None,
-            output_attentions=False,
+            # output_attentions=False,
     ):
         # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
         self_attn_past_key_value = (
@@ -494,8 +466,8 @@ class Layer(nn.Module):
         self_attention_outputs = self.attention(
             hidden_states,
             attention_mask,
-            head_mask,
-            output_attentions=output_attentions,
+            # head_mask,
+            # output_attentions=output_attentions,
             past_key_value=self_attn_past_key_value,
         )
         attention_output = self_attention_outputs[0]
@@ -524,11 +496,11 @@ class Layer(nn.Module):
             cross_attention_outputs = self.crossattention(
                 attention_output,
                 attention_mask,
-                head_mask,
+                # head_mask,
                 encoder_hidden_states,
                 encoder_attention_mask,
                 cross_attn_past_key_value,
-                output_attentions,
+                # output_attentions,
             )
             attention_output = cross_attention_outputs[0]
             outputs = (
@@ -571,12 +543,12 @@ class Encoder(nn.Module):
             self,
             hidden_states,
             attention_mask=None,
-            head_mask=None,
+            # head_mask=None,
             encoder_hidden_states=None,
             encoder_attention_mask=None,
             past_key_values=None,
             use_cache=None,
-            output_attentions=False,
+            # output_attentions=False,
             output_hidden_states=False,
             return_dict=True,
     ):
@@ -588,24 +560,25 @@ class Encoder(nn.Module):
                 )
                 use_cache = False
         all_hidden_states = () if output_hidden_states else None
-        all_self_attentions = () if output_attentions else None
-        all_cross_attentions = (
-            () if output_attentions and self.config.add_cross_attention else None
-        )
+        # all_self_attentions = () if output_attentions else None
+        # all_cross_attentions = (
+        #     () if output_attentions and self.config.add_cross_attention else None
+        # )
 
         next_decoder_cache = () if use_cache else None
         for i, layer_module in enumerate(self.layer):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            layer_head_mask = head_mask[i] if head_mask is not None else None
+            # layer_head_mask = head_mask[i] if head_mask is not None else None
             past_key_value = past_key_values[i] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
 
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
-                        return module(*inputs, past_key_value, output_attentions)
+                        # return module(*inputs, past_key_value, output_attentions)
+                        return module(*inputs, past_key_value)
 
                     return custom_forward
 
@@ -613,7 +586,7 @@ class Encoder(nn.Module):
                     create_custom_forward(layer_module),
                     hidden_states,
                     attention_mask,
-                    layer_head_mask,
+                    # layer_head_mask,
                     encoder_hidden_states,
                     encoder_attention_mask,
                 )
@@ -621,20 +594,20 @@ class Encoder(nn.Module):
                 layer_outputs = layer_module(
                     hidden_states,
                     attention_mask,
-                    layer_head_mask,
+                    # layer_head_mask,
                     encoder_hidden_states,
                     encoder_attention_mask,
                     past_key_value,
-                    output_attentions,
+                    # output_attentions,
                 )
 
             hidden_states = layer_outputs[0]
             if use_cache:
                 next_decoder_cache += (layer_outputs[-1],)
-            if output_attentions:
-                all_self_attentions = all_self_attentions + (layer_outputs[1],)
-                if self.config.add_cross_attention:
-                    all_cross_attentions = all_cross_attentions + (layer_outputs[2],)
+            # if output_attentions:
+            #     all_self_attentions = all_self_attentions + (layer_outputs[1],)
+            #     if self.config.add_cross_attention:
+            #         all_cross_attentions = all_cross_attentions + (layer_outputs[2],)
 
         if self.emb_layer_norm_after:
             hidden_states = self.emb_layer_norm_after(hidden_states)
@@ -649,8 +622,8 @@ class Encoder(nn.Module):
                     hidden_states,
                     next_decoder_cache,
                     all_hidden_states,
-                    all_self_attentions,
-                    all_cross_attentions,
+                    # all_self_attentions,
+                    # all_cross_attentions,
                 ]
                 if v is not None
             )
@@ -658,8 +631,8 @@ class Encoder(nn.Module):
             last_hidden_state=hidden_states,
             past_key_values=next_decoder_cache,
             hidden_states=all_hidden_states,
-            attentions=all_self_attentions,
-            cross_attentions=all_cross_attentions,
+            # attentions=all_self_attentions,
+            # cross_attentions=all_cross_attentions,
         )
 
 
@@ -757,15 +730,16 @@ class Model(PreTrainedModel):
             input_ids: Optional[torch.Tensor] = None,
             attention_mask: Optional[torch.Tensor] = None,
             position_ids: Optional[torch.Tensor] = None,
-            head_mask: Optional[torch.Tensor] = None,
+            # head_mask: Optional[torch.Tensor] = None,
             inputs_embeds: Optional[torch.Tensor] = None,
             encoder_hidden_states: Optional[torch.Tensor] = None,
             encoder_attention_mask: Optional[torch.Tensor] = None,
             past_key_values: Optional[List[torch.FloatTensor]] = None,
             use_cache: Optional[bool] = None,
-            output_attentions: Optional[bool] = None,
+            # output_attentions: Optional[bool] = None,
             output_hidden_states: Optional[bool] = None,
             return_dict: Optional[bool] = None,
+            methylation_ids: Optional[torch.Tensor] = None,
     ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPoolingAndCrossAttentions]:
         r"""
         encoder_hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
@@ -785,11 +759,11 @@ class Model(PreTrainedModel):
             If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
             `past_key_values`).
         """
-        output_attentions = (
-            output_attentions
-            if output_attentions is not None
-            else self.config.output_attentions
-        )
+        # output_attentions = (
+        #     output_attentions
+        #     if output_attentions is not None
+        #     else self.config.output_attentions
+        # )
         output_hidden_states = (
             output_hidden_states
             if output_hidden_states is not None
@@ -856,24 +830,25 @@ class Model(PreTrainedModel):
         # attention_probs has shape bsz x n_heads x N x N
         # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
-        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
+        # head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
         embedding_output = self.embeddings(
             input_ids=input_ids,
-            position_ids=position_ids,
+            # position_ids=position_ids,
             attention_mask=attention_mask,
+            methylation_ids=methylation_ids,
             inputs_embeds=inputs_embeds,
             past_key_values_length=past_key_values_length,
         )
         encoder_outputs = self.encoder(
             embedding_output,
             attention_mask=extended_attention_mask,
-            head_mask=head_mask,
+            # head_mask=head_mask,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_extended_attention_mask,
             past_key_values=past_key_values,
             use_cache=use_cache,
-            output_attentions=output_attentions,
+            # output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
@@ -894,9 +869,171 @@ class Model(PreTrainedModel):
             cross_attentions=encoder_outputs.cross_attentions,
         )
 
+class HierarchicalGenomeTransformer(PreTrainedModel):
+    def __init__(self, config_lower, config_upper):
+        super().__init__(config_lower, config_upper)
 
-class EsmLMHead(nn.Module):
-    """ESM Head for masked language modeling."""
+        lower_layer_config = config_lower
+        self.lower_layer_transformer = Model(lower_layer_config, add_pooling_layer=False)
+
+        higher_layer_config = config_upper
+        self.higher_layer_transformer = Model(higher_layer_config, add_pooling_layer=True)
+
+        self.segment_length = config_lower.segment_length
+        self.segment_stride = config_lower.segment_stride
+
+        self.post_init()
+
+    def forward(
+            self,
+            input_ids: Optional[torch.Tensor] = None,
+            methylation_ids: Optional[torch.Tensor] = None,
+            attention_mask: Optional[torch.Tensor] = None,
+    ):
+        batch_size, sequence_length = input_ids.shape
+
+        num_segments = (sequence_length - self.segment_length) // self.segment_stride + 1
+
+        segment_embeddings_list = []
+
+        for i in range(num_segments):
+            start_idx = i * self.segment_stride
+            end_idx = start_idx + self.segment_length
+
+            current_segment_input_ids = input_ids[:, start_idx:end_idx]
+            current_segment_attention_mask = attention_mask[:, start_idx:end_idx]
+
+            if current_segment_input_ids.shape[1] < self.segment_length:
+                padding_length = self.segment_length - current_segment_input_ids.shape[1]
+                current_segment_input_ids = torch.cat([
+                    current_segment_input_ids,
+                    torch.full((batch_size, padding_length), self.config.pad_token_id, dtype=torch.long, device=input_ids.device)
+                ], dim=1)
+                current_segment_attention_mask = torch.cat([
+                    current_segment_attention_mask,
+                    torch.zeros((batch_size, padding_length), dtype=torch.long, device=attention_mask.device)
+                ], dim=1)
+
+
+            lower_layer_output = self.lower_layer_transformer(
+                input_ids=current_segment_input_ids,
+                attention_mask=current_segment_attention_mask,
+                output_hidden_states=True,
+                return_dict=True,
+                methylation_ids = methylation_ids
+            )
+
+            segment_representation = lower_layer_output.last_hidden_state.mean(dim=1) # Shape: (batch_size, hidden_size)
+            segment_embeddings_list.append(segment_representation)
+
+        higher_layer_input_embeds = torch.stack(segment_embeddings_list, dim=1)
+
+        higher_layer_attention_mask = torch.ones(
+            batch_size, num_segments, dtype=torch.long, device=input_ids.device
+        )
+
+        higher_layer_output = self.higher_layer_transformer(
+            inputs_embeds=higher_layer_input_embeds,
+            attention_mask=higher_layer_attention_mask,
+            return_dict=True,
+            methylation_ids = methylation_ids
+        )
+
+        return higher_layer_output
+
+class MaskedLM(PreTrainedModel):
+    _tied_weights_keys = ["lm_head.decoder.weight"]
+
+    def __init__(self, config):
+        super().__init__(config)
+
+        if config.is_decoder:
+            logger.warning(
+                "If you want to use `EsmForMaskedLM` make sure `config.is_decoder=False` for "
+                "bi-directional self-attention."
+            )
+
+        self.model = HierarchicalGenomeTransformer(config, add_pooling_layer=False)
+        self.lm_head = LMHead(config)
+
+        self.init_weights()
+
+    def get_output_embeddings(self):
+        return self.lm_head.decoder
+
+    def set_output_embeddings(self, new_embeddings):
+        self.lm_head.decoder = new_embeddings
+
+    def forward(
+            self,
+            input_ids: Optional[torch.LongTensor] = None,
+            attention_mask: Optional[torch.Tensor] = None,
+            position_ids: Optional[torch.LongTensor] = None,
+            # head_mask: Optional[torch.Tensor] = None,
+            inputs_embeds: Optional[torch.FloatTensor] = None,
+            encoder_hidden_states: Optional[torch.FloatTensor] = None,
+            encoder_attention_mask: Optional[torch.Tensor] = None,
+            labels: Optional[torch.LongTensor] = None,
+            # output_attentions: Optional[bool] = None,
+            output_hidden_states: Optional[bool] = None,
+            return_dict: Optional[bool] = None,
+            methylation_ids: Optional[torch.Tensor] = None,
+    ) -> Union[Tuple, MaskedLMOutput]:
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
+            config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
+            loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
+        kwargs (`Dict[str, any]`, optional, defaults to *{}*):
+            Used to hide legacy arguments that have been deprecated.
+        """
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
+
+        outputs = self.model(
+            input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            # head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
+            # output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            methylation_ids=methylation_ids
+        )
+        sequence_output = outputs[0]
+        prediction_scores = self.lm_head(sequence_output)
+
+        masked_lm_loss = None
+        if labels is not None:
+            loss_fct = CrossEntropyLoss()
+
+            labels = labels.to(prediction_scores.device)
+            masked_lm_loss = loss_fct(
+                prediction_scores.view(-1, self.config.vocab_size), labels.view(-1)
+            )
+
+        if not return_dict:
+            output = (prediction_scores,) + outputs[2:]
+            return (
+                ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
+            )
+
+        return MaskedLMOutput(
+            loss=masked_lm_loss,
+            logits=prediction_scores,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+    def predict_contacts(self, tokens, attention_mask):
+        return self.model.predict_contacts(tokens, attention_mask=attention_mask)
+
+
+class LMHead(nn.Module):
 
     def __init__(self, config):
         super().__init__()
@@ -916,109 +1053,4 @@ class EsmLMHead(nn.Module):
         return x
 
 
-class ForSequenceClassification(PreTrainedModel):
-    def __init__(self, config):
-        super().__init__(config)
-        self.num_labels = config.num_labels
-        self.config = config
-
-        self.esm = Model(config, add_pooling_layer=False)
-        self.classifier = ClassificationHead(config)
-
-        self.init_weights()
-
-
-    def forward(
-            self,
-            input_ids: Optional[torch.LongTensor] = None,
-            attention_mask: Optional[torch.Tensor] = None,
-            position_ids: Optional[torch.LongTensor] = None,
-            head_mask: Optional[torch.Tensor] = None,
-            inputs_embeds: Optional[torch.FloatTensor] = None,
-            labels: Optional[torch.LongTensor] = None,
-            output_attentions: Optional[bool] = None,
-            output_hidden_states: Optional[bool] = None,
-            return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, SequenceClassifierOutput]:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
-        return_dict = (
-            return_dict if return_dict is not None else self.config.use_return_dict
-        )
-
-        outputs = self.esm(
-            input_ids,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            head_mask=head_mask,
-            inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-        sequence_output = outputs[0]
-        logits = self.classifier(sequence_output)
-
-        loss = None
-        if labels is not None:
-            labels = labels.to(logits.device)
-
-            if self.config.problem_type is None:
-                if self.num_labels == 1:
-                    self.config.problem_type = "regression"
-                elif self.num_labels > 1 and (
-                        labels.dtype == torch.long or labels.dtype == torch.int
-                ):
-                    self.config.problem_type = "single_label_classification"
-                else:
-                    self.config.problem_type = "multi_label_classification"
-
-            if self.config.problem_type == "regression":
-                loss_fct = MSELoss()
-                if self.num_labels == 1:
-                    loss = loss_fct(logits.squeeze(), labels.squeeze())
-                else:
-                    loss = loss_fct(logits, labels)
-            elif self.config.problem_type == "single_label_classification":
-                loss_fct = CrossEntropyLoss()
-                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-            elif self.config.problem_type == "multi_label_classification":
-                loss_fct = BCEWithLogitsLoss()
-                loss = loss_fct(logits, labels)
-
-        if not return_dict:
-            output = (logits,) + outputs[2:]
-            return ((loss,) + output) if loss is not None else output
-
-        return SequenceClassifierOutput(
-            loss=loss,
-            logits=logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-        )
-
-
-
-
-class ClassificationHead(nn.Module):
-    """Head for sentence-level classification tasks."""
-
-    def __init__(self, config):
-        super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.out_proj = nn.Linear(config.hidden_size, config.num_labels)
-
-    def forward(self, features, **kwargs):
-        x = features[:, 0, :]  # take [CLS] token
-        x = self.dropout(x)
-        x = self.dense(x)
-        x = torch.SiLU(x)
-        x = self.dropout(x)
-        x = self.out_proj(x)
-        return x
 
