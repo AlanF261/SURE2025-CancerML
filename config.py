@@ -17,6 +17,7 @@ class Config(PretrainedConfig):
             intermediate_size=3072,
             hidden_dropout_prob=0.1,
             attention_probs_dropout_prob=0.1,
+            attention_probs_secondary_dropout=0, #0 because nn.func already applies dropout
             max_position_embeddings=1026,
             initializer_range=0.02,
             layer_norm_eps=1e-12,
@@ -30,6 +31,7 @@ class Config(PretrainedConfig):
             segment_length = 11500,
             segment_stride = 0,
             max_methylation_embeddings = 131070,
+            age_unk_id = 0,
             **kwargs,
     ):
         super().__init__(
@@ -53,3 +55,5 @@ class Config(PretrainedConfig):
         self.is_folding_model = is_folding_model
         self.segment_length = segment_length
         self.segment_stride = segment_stride
+        self.max_methylation_embeddings = max_methylation_embeddings
+        self.age_unk_id = age_unk_id

@@ -49,6 +49,8 @@
       "normalized": false
     }
   ],
+  "max_age_embeddings": 120,
+  "age_unk_id": 0,
   "normalizer": null,
   "pre_tokenizer": {
     "type": "Whitespace"
