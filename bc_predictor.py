@@ -28,7 +28,7 @@ from transformers.modeling_utils import (
 )
 from transformers.utils import logging
 
-from .config import Config
+from config import Config
 
 logger = logging.get_logger(__name__)
 
@@ -129,7 +129,7 @@ class Embeddings(nn.Module):
             padding_idx=self.padding_idx,
         )
         self.age_embeddings = nn.Embedding(
-            config.max_age_embeddings, config.hidden_size, padding_idx=config.age_unk_id
+            config.max_age_embeddings, config.hidden_size, padding_idx=config.age_unk_id #adjust to have 45 0 0 0 instead of 45 repeating
         )
         self.token_dropout = config.token_dropout
         self.mask_token_id = config.mask_token_id
@@ -895,6 +895,26 @@ class HierarchicalGenomeTransformer(PreTrained):
 
         return higher_layer_output
 
+
+class LMHead(nn.Module):
+
+    def __init__(self, config):
+        super().__init__()
+        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
+        self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+
+        self.decoder = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        self.bias = nn.Parameter(torch.zeros(config.vocab_size))
+
+    def forward(self, features, **kwargs):
+        x = self.dense(features)
+        x = gelu(x)
+        x = self.layer_norm(x)
+
+        # project back to size of vocabulary with bias
+        x = self.decoder(x) + self.bias
+        return x
+
 class MaskedLM(PreTrained):
     _tied_weights_keys = ["lm_head.decoder.weight"]
 
@@ -911,6 +931,7 @@ class MaskedLM(PreTrained):
         self.lm_head = LMHead(config)
 
         self.init_weights()
+        # self.post_init()
 
     def get_output_embeddings(self):
         return self.lm_head.decoder
@@ -983,28 +1004,10 @@ class MaskedLM(PreTrained):
             attentions=outputs.attentions,
         )
 
-    def predict_contacts(self, tokens, attention_mask):
-        return self.model.predict_contacts(tokens, attention_mask=attention_mask)
+    # def predict_contacts(self, tokens, attention_mask):
+    #     return self.model.predict_contacts(tokens, attention_mask=attention_mask)
 
 
-class LMHead(nn.Module):
-
-    def __init__(self, config):
-        super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-
-        self.decoder = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-        self.bias = nn.Parameter(torch.zeros(config.vocab_size))
-
-    def forward(self, features, **kwargs):
-        x = self.dense(features)
-        x = gelu(x)
-        x = self.layer_norm(x)
-
-        # project back to size of vocabulary with bias
-        x = self.decoder(x) + self.bias
-        return x
 
 
 

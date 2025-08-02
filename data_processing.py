@@ -25,16 +25,18 @@ class Tokenizer:
         self.cls_token_id = self.special_tokens_map.get(self.cls_token, 1)
         self.sep_token = "[SEP]"
         self.sep_token_id = self.special_tokens_map.get(self.sep_token, 2)
+        self.pad_token = "[PAD]"
+        self.pad_token_id = self.special_tokens_map.get(self.pad_token, 3)
         self.meth_unk_id = 0 # hard coded for now, fix later
 
-        self.single_template = self.tokenizer_config.get("post_processor", {}).get("single", [])
-        self.pair_template = self.tokenizer_config.get("post_processor", {}).get("pair", [])
+        # self.single_template = self.tokenizer_config.get("post_processor", {}).get("single", [])
+        # self.pair_template = self.tokenizer_config.get("post_processor", {}).get("pair", [])
 
         self.max_age_embeddings = self.tokenizer_config.get("max_age_embeddings", 100)
         self.age_unk_id = self.tokenizer_config.get("age_unk_id", 0)
 
 
-    def _generate_default_methylation_vocab(self, max_len=8):
+    def _generate_default_methylation_vocab(self, max_len=16):
         self.methylation_vocab = {}
         current_id = 1
 
@@ -63,7 +65,7 @@ class Tokenizer:
 
             current_combinations = [combo for combo in vocab_additions if len(combo) <= max_len]
 
-    def extract_methylated_sequence(bam_file_path):
+    def extract_methylated_sequence(self, bam_file_path):
         #Z, X, H, U for methylated; z, x, h, u for unmethylated
         dna_sequences = []
         methylation_tags = []
@@ -157,7 +159,7 @@ class Tokenizer:
 
         sequence, methylation_seq = self.extract_methylated_sequence(bam_file_path)
 
-        raw_methylation_tokens = self.convert_meth(sequence, methylation_seq)
+        raw_methylation_tokens = self.convert_meth(methylation_seq)
 
         merged_sequence_tokens, merged_methylation_tokens = self.bpe_merge(sequence, raw_methylation_tokens)
 

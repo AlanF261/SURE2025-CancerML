@@ -24,7 +24,7 @@ class Config(PretrainedConfig):
             position_embedding_type="absolute",
             use_cache=True,
             emb_layer_norm_before=None,
-            token_dropout=False,
+            token_dropout=True,
             is_folding_model=False,
             vocab_list=None,
             add_bias_fnn=True,
