@@ -8,9 +8,9 @@ class Config(PretrainedConfig):
 
     def __init__(
             self,
-            vocab_size=None,
-            mask_token_id=None,
-            pad_token_id=None,
+            vocab_size=4095,
+            mask_token_id=4,
+            pad_token_id=3,
             hidden_size=768,
             num_hidden_layers=12,
             num_attention_heads=12,
