@@ -271,8 +271,8 @@ class AttentionCalculation(nn.Module):
 
         query_layer = query_layer * self.attention_head_size**-0.5
 
-        if self.is_decoder:
-                # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
+        # if self.is_decoder:
+            # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
             # Further calls to cross_attention layer can then reuse all cross-attention
             # key/value_states (first "if" case)
             # if uni-directional self-attention (decoder) save Tuple(torch.Tensor, torch.Tensor) of

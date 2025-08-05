@@ -28,8 +28,12 @@ class Config(PretrainedConfig):
             is_folding_model=False,
             vocab_list=None,
             add_bias_fnn=True,
-            segment_length = 11500,
-            segment_stride = 0,
+            # segment_length = 11500,
+            # segment_stride = 0,
+            chunk_size = 11500,
+            num_first_blocks = 600000,
+            num_second_blocks = 50,
+            num_third_blocks = 1,
             max_methylation_embeddings = 131070,
             age_unk_id = 0,
             **kwargs,
@@ -53,7 +57,7 @@ class Config(PretrainedConfig):
         self.emb_layer_norm_before = emb_layer_norm_before
         self.token_dropout = token_dropout
         self.is_folding_model = is_folding_model
-        self.segment_length = segment_length
-        self.segment_stride = segment_stride
+        # self.segment_length = segment_length
+        # self.segment_stride = segment_stride
         self.max_methylation_embeddings = max_methylation_embeddings
         self.age_unk_id = age_unk_id
