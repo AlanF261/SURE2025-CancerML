@@ -1,14 +1,15 @@
 # Code primarily copied from Nucleotide Transformer v2 with modifications.
 
 import math
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Tuple, Union
+#removed List
 
 import torch
 import torch.utils.checkpoint
 from torch import nn
 # from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss, SiLU
 from torch.nn import CrossEntropyLoss, SiLU
-import torch.nn.functional as nnFunc
+import torch.nn.functional as nnfunc
 # from transformers.file_utils import (
 #     add_code_sample_docstrings,
 #     add_start_docstrings,
@@ -16,7 +17,7 @@ import torch.nn.functional as nnFunc
 # )
 from transformers.modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
-    BaseModelOutputWithPoolingAndCrossAttentions,
+    # BaseModelOutputWithPoolingAndCrossAttentions,
     MaskedLMOutput,
     # SequenceClassifierOutput,
     # TokenClassifierOutput,
@@ -52,7 +53,7 @@ def gelu(x):
 
 
 def symmetrize(x):
-    "Make layer symmetric in final two dimensions, used for contact prediction."
+    """Make layer symmetric in final two dimensions, used for contact prediction."""
     return x + x.transpose(-1, -2)
 
 
@@ -271,14 +272,14 @@ class AttentionCalculation(nn.Module):
         query_layer = query_layer * self.attention_head_size**-0.5
 
         if self.is_decoder:
-            # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
+                # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
             # Further calls to cross_attention layer can then reuse all cross-attention
             # key/value_states (first "if" case)
             # if uni-directional self-attention (decoder) save Tuple(torch.Tensor, torch.Tensor) of
             # all previous decoder key/value_states. Further calls to uni-directional self-attention
             # can concat previous decoder key/value_states to current projected key/value_states (third "elif" case)
             # if encoder bi-directional self-attention `past_key_value` is always `None`
-            past_key_value = (key_layer, value_layer)
+            # past_key_value = (key_layer, value_layer)
 
         if self.position_embedding_type == "rotary":
             query_layer, key_layer = self.rotary_embeddings(query_layer, key_layer)
@@ -309,7 +310,7 @@ class AttentionCalculation(nn.Module):
         # context_layer = context_layer.view(new_context_layer_shape)
 
 
-        context_layer = nnFunc.scaled_dot_product_attention(
+        context_layer = nnfunc.scaled_dot_product_attention(
             query_layer,
             key_layer,
             value_layer,
@@ -565,7 +566,7 @@ class Encoder(nn.Module):
     ):
         if self.gradient_checkpointing and self.training:
             if use_cache:
-                logger.warning_once(
+                logger.warning(
                     "`use_cache=True` is incompatible with `config.gradient_checkpointing=True`. Setting "
                     "`use_cache=False`..."
                 )
@@ -927,7 +928,7 @@ class MaskedLM(PreTrained):
                 "bi-directional self-attention."
             )
 
-        self.model = HierarchicalGenomeTransformer(config, add_pooling_layer=False)
+        self.model = HierarchicalGenomeTransformer(config)
         self.lm_head = LMHead(config)
 
         self.init_weights()

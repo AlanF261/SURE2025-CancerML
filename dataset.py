@@ -85,5 +85,5 @@ class LineByLineTextDataset(Dataset):
     def __len__(self):
         return len(self.examples)
 
-    def __getitem__(self, i) -> collections.Mapping[str, torch.Tensor]:
+    def __getitem__(self, i) -> collections.abc.Mapping[str, torch.Tensor]:
         return self.examples[i]
