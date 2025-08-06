@@ -2,7 +2,7 @@
 
 import math
 from typing import Optional, Tuple, Union
-#removed List
+# removed List
 
 import torch
 import torch.utils.checkpoint
@@ -17,7 +17,7 @@ import torch.nn.functional as nnfunc
 # )
 from transformers.modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
-    # BaseModelOutputWithPoolingAndCrossAttentions,
+    BaseModelOutputWithPoolingAndCrossAttentions,
     MaskedLMOutput,
     # SequenceClassifierOutput,
     # TokenClassifierOutput,
@@ -28,10 +28,11 @@ from transformers.modeling_utils import (
     prune_linear_layer,
 )
 from transformers.utils import logging
-#modify later
+# modify later
 from config import Config
 
 logger = logging.get_logger(__name__)
+
 
 def rotate_half(x):
     x1, x2 = x.chunk(2, dim=-1)
@@ -55,7 +56,6 @@ def gelu(x):
 def symmetrize(x):
     """Make layer symmetric in final two dimensions, used for contact prediction."""
     return x + x.transpose(-1, -2)
-
 
 
 class RotaryEmbedding(torch.nn.Module):
@@ -130,36 +130,36 @@ class Embeddings(nn.Module):
             padding_idx=self.padding_idx,
         )
         self.age_embeddings = nn.Embedding(
-            config.max_age_embeddings, config.hidden_size, padding_idx=config.age_unk_id #adjust to have 45 0 0 0 instead of 45 repeating
+            config.max_age_embeddings, config.hidden_size, padding_idx=config.age_unk_id
+            # adjust to have 45 0 0 0 instead of 45 repeating
         )
         self.token_dropout = config.token_dropout
         self.mask_token_id = config.mask_token_id
-
 
     def forward(
             self,
             input_ids=None,
             attention_mask=None,
             methylation_ids=None,
-            age_ids = None,
+            age_ids=None,
             inputs_embeds=None,
-            past_key_values_length=0,
+            # past_key_values_length=0,
     ):
 
         if inputs_embeds is None:
-            inputs_embeds = self.word_embeddings(input_ids)
-
-        if methylation_ids is None:
-            raise ValueError(
-                "methylation_ids must be provided."
-            )
-        methyl_embeds = self.methylation_embeddings(methylation_ids)
-        age_embeds = self.age_embeddings(age_ids)
-
-        if age_ids is None:
-            embeddings = inputs_embeds + methyl_embeds
+            embeddings = self.word_embeddings(input_ids)
         else:
-            embeddings = inputs_embeds + methyl_embeds + age_embeds
+            embeddings = inputs_embeds
+
+        if methylation_ids is not None:
+            # methyl_embeds = self.methylation_embeddings(methylation_ids)
+            # embeddings = embeddings + methyl_embeds
+            methylation_embeddings = self.methylation_embeddings(methylation_ids)
+            embeddings += methylation_embeddings
+
+        if age_ids is not None:
+            age_embeds = self.age_embeddings(age_ids)
+            embeddings += age_embeds
 
         if self.token_dropout:
             embeddings.masked_fill_(
@@ -177,11 +177,6 @@ class Embeddings(nn.Module):
                     * (1 - mask_ratio_train)
                     / (1 - mask_ratio_observed)[:, None, None]
             ).to(embeddings.dtype)
-
-
-
-        methylation_embeddings = self.methylation_embeddings(methylation_ids)
-        embeddings += methylation_embeddings
 
         if self.layer_norm is not None:
             embeddings = self.layer_norm(embeddings)
@@ -240,7 +235,7 @@ class AttentionCalculation(nn.Module):
             encoder_hidden_states: Optional[torch.FloatTensor] = None,
             encoder_attention_mask: Optional[torch.FloatTensor] = None,
             past_key_value: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
-    ): # -> Tuple[torch.Tensor]
+    ):  # -> Tuple[torch.Tensor]
         mixed_query_layer = self.query(hidden_states)
 
         # If this is instantiated as a cross-attention module, the keys
@@ -271,44 +266,8 @@ class AttentionCalculation(nn.Module):
 
         query_layer = query_layer * self.attention_head_size**-0.5
 
-        # if self.is_decoder:
-            # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
-            # Further calls to cross_attention layer can then reuse all cross-attention
-            # key/value_states (first "if" case)
-            # if uni-directional self-attention (decoder) save Tuple(torch.Tensor, torch.Tensor) of
-            # all previous decoder key/value_states. Further calls to uni-directional self-attention
-            # can concat previous decoder key/value_states to current projected key/value_states (third "elif" case)
-            # if encoder bi-directional self-attention `past_key_value` is always `None`
-            # past_key_value = (key_layer, value_layer)
-
         if self.position_embedding_type == "rotary":
             query_layer, key_layer = self.rotary_embeddings(query_layer, key_layer)
-
-        # Take the dot product between "query" and "key" to get the raw attention scores.
-        # attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
-        #
-        # if attention_mask is not None:
-        #     # Ap
-        #     # ply the attention mask is (precomputed for all layers in EsmModel forward() function)
-        #     attention_scores = attention_scores + attention_mask
-        #
-        # # Normalize the attention scores to probabilities.
-        # attention_probs = nn.functional.softmax(attention_scores, dim=-1)
-        #
-        # # This is actually dropping out entire tokens to attend to, which might
-        # # seem a bit unusual, but is taken from the original Transformer paper.
-        # attention_probs = self.dropout(attention_probs)
-        #
-        # # Mask heads if we want to
-        # if head_mask is not None:
-        #     attention_probs = attention_probs * head_mask
-        #
-        # context_layer = torch.matmul(attention_probs, value_layer)
-        #
-        # context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
-        # new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
-        # context_layer = context_layer.view(new_context_layer_shape)
-
 
         context_layer = nnfunc.scaled_dot_product_attention(
             query_layer,
@@ -317,19 +276,20 @@ class AttentionCalculation(nn.Module):
             attn_mask=attention_mask,
             dropout_p=self.dropout.p,
             is_causal=False
-        )# Replacing manual attention calculation with torch.nn.functional.scaled_dot_product_attention
+        )
+        # Replacing manual attention calculation with torch.nn.functional.scaled_dot_product_attention
         # to potentially use flash attention if optimal, sigificantly improving performance
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
         context_layer = context_layer.view(new_context_layer_shape)
 
         # if head_mask is not None:
-        #     context_layer_reshaped = context_layer.view(context_layer.size()[:-1] + (self.num_attention_heads, self.attention_head_size)).permute(0, 2, 1, 3)
+        #     context_layer_reshaped = context_layer.view(context_layer.size()[:-1] +
+        #     (self.num_attention_heads, self.attention_head_size)).permute(0, 2, 1, 3)
         #     context_layer_reshaped = context_layer_reshaped * head_mask
         #     context_layer = context_layer_reshaped.permute(0, 2, 1, 3).contiguous().view(new_context_layer_shape)
 
-        outputs = (context_layer)
-
+        outputs = context_layer
 
         # if self.is_decoder:
         #     outputs = outputs + (past_key_value,)
@@ -493,7 +453,7 @@ class Layer(nn.Module):
                       1:
                       ]  # add self attentions if we output attention weights
 
-        cross_attn_present_key_value = None
+        # cross_attn_present_key_value = None
         if self.is_decoder and encoder_hidden_states is not None:
             if not hasattr(self, "crossattention"):
                 raise AttributeError(
@@ -694,18 +654,7 @@ class PreTrained(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
 
-
-
 class Model(PreTrained):
-    """
-    The model can behave as an encoder (with only self-attention) as well as a decoder, in which case a layer of
-    cross-attention is added between the self-attention layers, following the architecture described in [Attention is
-    all you need](https://arxiv.org/abs/1706.03762) by Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit,
-    Llion Jones, Aidan N. Gomez, Lukasz Kaiser and Illia Polosukhin.
-    To behave as an decoder the model needs to be initialized with the `is_decoder` argument of the configuration set
-    to `True`. To be used in a Seq2Seq model, the model needs to initialized with both `is_decoder` argument and
-    `add_cross_attention` set to `True`; an `encoder_hidden_states` is then expected as an input to the forward pass.
-    """
 
     supports_gradient_checkpointing = False
 
@@ -737,15 +686,16 @@ class Model(PreTrained):
         """
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
+
     def forward(
             self,
             input_ids: Optional[torch.Tensor] = None,
             attention_mask: Optional[torch.Tensor] = None,
-            token_type_ids: Optional[torch.Tensor] = None,
-            methylation_attention_mask: Optional[torch.Tensor] = None,
-            position_ids: Optional[torch.Tensor] = None,
+            # token_type_ids: Optional[torch.Tensor] = None,
+            methylation_ids: Optional[torch.Tensor] = None,
+            # position_ids: Optional[torch.Tensor] = None,
             age_ids: Optional[torch.Tensor] = None,
-            head_mask: Optional[torch.Tensor] = None,
+            # head_mask: Optional[torch.Tensor] = None,
             inputs_embeds: Optional[torch.Tensor] = None,
             output_attentions: Optional[bool] = None,
             output_hidden_states: Optional[bool] = None,
@@ -776,15 +726,16 @@ class Model(PreTrained):
             attention_mask = torch.ones(((batch_size, seq_length)), device=device)
 
         # Ensure attention_mask has the correct shape for broadcasting (batch_size, 1, 1, seq_length)
-        extended_attention_mask: torch.Tensor = self.encoder.get_extended_attention_mask(
+        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(
             attention_mask, input_shape, device
         )
 
         embedding_output = self.embeddings(
             input_ids=input_ids,
-            token_type_ids=token_type_ids,
-            methylation_attention_mask=methylation_attention_mask,
-            position_ids=position_ids,
+            attention_mask=attention_mask,
+            # token_type_ids=token_type_ids,
+            methylation_ids=methylation_ids,
+            # position_ids=position_ids,
             age_ids=age_ids,
             inputs_embeds=inputs_embeds,
         )
@@ -792,12 +743,27 @@ class Model(PreTrained):
         encoder_outputs = self.encoder(
             embedding_output,
             attention_mask=extended_attention_mask,
-            head_mask=head_mask,
+            # head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
         sequence_output = encoder_outputs[0]
+
+        if self.pooler is not None:
+            pooled_output = self.pooler(sequence_output)
+            # You can return this pooled_output directly or as part of a tuple/dictionary
+            if not return_dict:
+                return (pooled_output,) + encoder_outputs[1:]
+
+            return BaseModelOutputWithPoolingAndCrossAttentions(
+                last_hidden_state=sequence_output,
+                pooler_output=pooled_output,
+                past_key_values=encoder_outputs.past_key_values,
+                hidden_states=encoder_outputs.hidden_states,
+                attentions=encoder_outputs.attentions,
+                cross_attentions=encoder_outputs.cross_attentions,
+            )
 
         if not return_dict:
             return (sequence_output,) + encoder_outputs[1:]
@@ -829,6 +795,8 @@ class HierarchicalGenomeTransformer(PreTrained):
             input_ids: Optional[torch.Tensor] = None,
             methylation_ids: Optional[torch.Tensor] = None,
             attention_mask: Optional[torch.Tensor] = None,
+            # head_mask: Optional[torch.Tensor] = None,
+            age_ids: Optional[torch.Tensor] = None,
     ):
         batch_size, sequence_length = input_ids.shape
 
@@ -844,30 +812,19 @@ class HierarchicalGenomeTransformer(PreTrained):
             current_segment_attention_mask = attention_mask[:, start_idx:end_idx]
             current_segment_methylation_ids = methylation_ids[:, start_idx:end_idx]
 
-            # if current_segment_input_ids.shape[1] < self.segment_length:
-            #     padding_length = self.segment_length - current_segment_input_ids.shape[1]
-            #     current_segment_input_ids = torch.cat([
-            #         current_segment_input_ids,
-            #         torch.full((batch_size, padding_length), self.config.pad_token_id, dtype=torch.long, device=input_ids.device)
-            #     ], dim=1)
-            #     current_segment_attention_mask = torch.cat([
-            #         current_segment_attention_mask,
-            #         torch.zeros((batch_size, padding_length), dtype=torch.long, device=attention_mask.device)
-            #     ], dim=1)
             if current_segment_input_ids.shape[1] < self.segment_length:
                 padding_length = self.segment_length - current_segment_input_ids.shape[1]
-                # Pad input_ids, attention_mask, and methylation_ids
                 current_segment_input_ids = torch.cat([
                     current_segment_input_ids,
-                    torch.full((batch_size, padding_length), self.config_lower.pad_token_id, dtype=torch.long, device=input_ids.device)
+                    torch.full((batch_size, padding_length), self.config.pad_token_id, dtype=torch.long, device=input_ids.device)
                 ], dim=1)
                 current_segment_attention_mask = torch.cat([
                     current_segment_attention_mask,
                     torch.zeros((batch_size, padding_length), dtype=torch.long, device=attention_mask.device)
                 ], dim=1)
-                current_segment_methylation_ids = torch.cat([ # <--- PAD METHYLATION_IDS
+                current_segment_methylation_ids = torch.cat([
                     current_segment_methylation_ids,
-                    torch.full((batch_size, padding_length), self.config_lower.pad_token_id, dtype=torch.long, device=methylation_ids.device) # Assuming pad_token_id is suitable for methylation as well
+                    torch.full((batch_size, padding_length), self.config.meth_pad_id, dtype=torch.long, device=methylation_ids.device)
                 ], dim=1)
 
             lower_layer_output = self.lower_layer_transformer(
@@ -875,10 +832,12 @@ class HierarchicalGenomeTransformer(PreTrained):
                 attention_mask=current_segment_attention_mask,
                 output_hidden_states=True,
                 return_dict=True,
-                methylation_ids = methylation_ids
+                methylation_ids=current_segment_methylation_ids,
+                age_ids=age_ids,
+                # head_mask=head_mask,
             )
 
-            segment_representation = lower_layer_output.last_hidden_state.mean(dim=1) # Shape: (batch_size, hidden_size)
+            segment_representation = lower_layer_output.last_hidden_state.mean(dim=1)  # Shape: (batch_size, hidden_size)
             segment_embeddings_list.append(segment_representation)
 
         higher_layer_input_embeds = torch.stack(segment_embeddings_list, dim=1)
@@ -891,7 +850,7 @@ class HierarchicalGenomeTransformer(PreTrained):
             inputs_embeds=higher_layer_input_embeds,
             attention_mask=higher_layer_attention_mask,
             return_dict=True,
-            methylation_ids = None
+            methylation_ids=None
         )
 
         return higher_layer_output
@@ -907,7 +866,7 @@ class LMHead(nn.Module):
         self.decoder = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
         self.bias = nn.Parameter(torch.zeros(config.vocab_size))
 
-    def forward(self, features, **kwargs):
+    def forward(self, features):
         x = self.dense(features)
         x = gelu(x)
         x = self.layer_norm(x)
@@ -915,6 +874,7 @@ class LMHead(nn.Module):
         # project back to size of vocabulary with bias
         x = self.decoder(x) + self.bias
         return x
+
 
 class MaskedLM(PreTrained):
     _tied_weights_keys = ["lm_head.decoder.weight"]
@@ -924,7 +884,7 @@ class MaskedLM(PreTrained):
 
         if config.is_decoder:
             logger.warning(
-                "If you want to use `EsmForMaskedLM` make sure `config.is_decoder=False` for "
+                "If you want to use `MaskedLM` make sure `config.is_decoder=False` for "
                 "bi-directional self-attention."
             )
 
@@ -944,7 +904,7 @@ class MaskedLM(PreTrained):
             self,
             input_ids: Optional[torch.LongTensor] = None,
             attention_mask: Optional[torch.Tensor] = None,
-            position_ids: Optional[torch.LongTensor] = None,
+            # position_ids: Optional[torch.LongTensor] = None,
             # head_mask: Optional[torch.Tensor] = None,
             inputs_embeds: Optional[torch.FloatTensor] = None,
             encoder_hidden_states: Optional[torch.FloatTensor] = None,
@@ -970,7 +930,7 @@ class MaskedLM(PreTrained):
         outputs = self.model(
             input_ids,
             attention_mask=attention_mask,
-            position_ids=position_ids,
+            # position_ids=position_ids,
             # head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             encoder_hidden_states=encoder_hidden_states,
@@ -1007,8 +967,3 @@ class MaskedLM(PreTrained):
 
     # def predict_contacts(self, tokens, attention_mask):
     #     return self.model.predict_contacts(tokens, attention_mask=attention_mask)
-
-
-
-
-

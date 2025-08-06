@@ -63,7 +63,7 @@ class LineByLineTextDataset(Dataset):
                     if current_len < self.block_size:
                         padding_len = self.block_size - current_len
                         input_ids = input_ids + [self.tokenizer.pad_token_id] * padding_len
-                        methylation_ids = methylation_ids + [self.tokenizer.meth_unk_id] * padding_len
+                        methylation_ids = methylation_ids + [self.tokenizer.meth_pad_id] * padding_len
                         age_ids = age_ids + [self.tokenizer.age_unk_id] * padding_len
                     elif current_len > self.block_size:
                         input_ids = input_ids[:self.block_size]

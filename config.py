@@ -18,7 +18,7 @@ class Config(PretrainedConfig):
             hidden_dropout_prob=0.1,
             attention_probs_dropout_prob=0.1,
             attention_probs_secondary_dropout=0, #0 because nn.func already applies dropout
-            max_position_embeddings=1026,
+            # max_position_embeddings=1026,
             initializer_range=0.02,
             layer_norm_eps=1e-12,
             position_embedding_type="absolute",
@@ -35,7 +35,9 @@ class Config(PretrainedConfig):
             num_second_blocks = 50,
             num_third_blocks = 1,
             max_methylation_embeddings = 131070,
-            age_unk_id = 0,
+            meth_pad_id = 0,
+            age_pad_id = 0,
+            max_age_embeddings = 120,
             **kwargs,
     ):
         super().__init__(
@@ -49,7 +51,7 @@ class Config(PretrainedConfig):
         self.intermediate_size = intermediate_size
         self.hidden_dropout_prob = hidden_dropout_prob
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.max_position_embeddings = max_position_embeddings
+        # self.max_position_embeddings = max_position_embeddings
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
         self.position_embedding_type = position_embedding_type

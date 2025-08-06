@@ -27,7 +27,7 @@ class Tokenizer:
         self.sep_token_id = self.special_tokens_map.get(self.sep_token, 2)
         self.pad_token = "[PAD]"
         self.pad_token_id = self.special_tokens_map.get(self.pad_token, 3)
-        self.meth_unk_id = 0 # hard coded for now, fix later
+        self.meth_pad_id = 0 # hard coded for now, fix later
 
         # self.single_template = self.tokenizer_config.get("post_processor", {}).get("single", [])
         # self.pair_template = self.tokenizer_config.get("post_processor", {}).get("pair", [])
@@ -143,7 +143,7 @@ class Tokenizer:
 
         methylation_ids = []
         for m_token in methylation_tokens:
-            methylation_ids.append(self.methylation_vocab.get(m_token, self.meth_unk_id))
+            methylation_ids.append(self.methylation_vocab.get(m_token, self.meth_pad_id))
 
         return word_token_ids, methylation_ids
 

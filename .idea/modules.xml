@@ -2,7 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/.idea/SURE2025-Cancer-ML-main.iml" filepath="$PROJECT_DIR$/.idea/SURE2025-Cancer-ML-main.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/SURE2025-CancerML.iml" filepath="$PROJECT_DIR$/.idea/SURE2025-CancerML.iml" />
     </modules>
   </component>
 </project>
