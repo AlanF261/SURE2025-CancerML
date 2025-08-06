@@ -123,14 +123,13 @@ class Embeddings(nn.Module):
         #     persistent=False,
         # )
 
-        self.padding_idx = config.pad_token_id
         self.methylation_embeddings = nn.Embedding(
-            config.max_methylation_embeddings,
-            config.hidden_size,
-            padding_idx=self.padding_idx,
+            self.config.max_methylation_embeddings,
+            self.config.hidden_size,
+            padding_idx=self.config.meth_pad_id,
         )
         self.age_embeddings = nn.Embedding(
-            config.max_age_embeddings, config.hidden_size, padding_idx=config.age_unk_id
+            self.config.max_age_embeddings, self.config.hidden_size, padding_idx=self.config.age_pad_id
             # adjust to have 45 0 0 0 instead of 45 repeating
         )
         self.token_dropout = config.token_dropout
@@ -292,7 +291,7 @@ class AttentionCalculation(nn.Module):
 
         # if self.is_decoder:
         #     outputs = outputs + (past_key_value,)
-        return outputs
+        return (outputs,)
 
 
 class AttentionResidualOutput(nn.Module):
@@ -360,9 +359,7 @@ class AttentionMain(nn.Module):
             # output_attentions,
         )
         attention_output = self.output(self_outputs[0], hidden_states)
-        outputs = (attention_output,) + self_outputs[
-                                        1:
-                                        ]  # add attentions if we output them
+        outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
         return outputs
 
 
@@ -589,7 +586,7 @@ class Pooler(nn.Module):
         return pooled_output
 
 
-class PreTrained(PreTrainedModel):
+class BasePreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
@@ -618,7 +615,7 @@ class PreTrained(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
 
-class Model(PreTrained):
+class Model(BasePreTrainedModel):
 
     supports_gradient_checkpointing = False
 
@@ -742,7 +739,7 @@ class Model(PreTrained):
         )
 
 
-class HierarchicalGenomeTransformer(PreTrained):
+class HierarchicalGenomeTransformer(BasePreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
@@ -802,7 +799,7 @@ class HierarchicalGenomeTransformer(PreTrained):
                 output_hidden_states=True,
                 return_dict=True,
                 methylation_ids=current_segment_methylation_ids,
-                age_ids=age_ids,
+                # age_ids=age_ids,
 
                 # head_mask=head_mask,
             )
@@ -821,7 +818,8 @@ class HierarchicalGenomeTransformer(PreTrained):
             inputs_embeds=higher_layer_input_embeds,
             attention_mask=higher_layer_attention_mask,
             return_dict=True,
-            methylation_ids=None
+            methylation_ids=None,
+            age_ids=age_ids,  #age_ids moved to individual level representation
         )
 
         return higher_layer_output
@@ -847,7 +845,7 @@ class LMHead(nn.Module):
         return x
 
 
-class MaskedLM(PreTrained):
+class MaskedLM(BasePreTrainedModel):
     _tied_weights_keys = ["lm_head.decoder.weight"]
 
     def __init__(self, config):
@@ -862,8 +860,8 @@ class MaskedLM(PreTrained):
         self.model = HierarchicalGenomeTransformer(config)
         self.lm_head = LMHead(config)
 
-        self.init_weights()
-        # self.post_init()
+        # self.init_weights()
+        self.post_init()
 
     def get_output_embeddings(self):
         return self.lm_head.decoder
