@@ -4,6 +4,7 @@ import pysam
 import json
 from typing import Optional, List
 
+
 class Tokenizer:
     def __init__(self, tokenizer_config_path):
 
@@ -27,14 +28,13 @@ class Tokenizer:
         self.sep_token_id = self.special_tokens_map.get(self.sep_token, 2)
         self.pad_token = "[PAD]"
         self.pad_token_id = self.special_tokens_map.get(self.pad_token, 3)
-        self.meth_pad_id = 0 # hard coded for now, fix later
+        self.meth_pad_id = 0  # hard coded for now, fix later
 
         # self.single_template = self.tokenizer_config.get("post_processor", {}).get("single", [])
         # self.pair_template = self.tokenizer_config.get("post_processor", {}).get("pair", [])
 
         self.max_age_embeddings = self.tokenizer_config.get("max_age_embeddings", 100)
         self.age_unk_id = self.tokenizer_config.get("age_unk_id", 0)
-
 
     def _generate_default_methylation_vocab(self, max_len=16):
         self.methylation_vocab = {}
@@ -66,7 +66,7 @@ class Tokenizer:
             current_combinations = [combo for combo in vocab_additions if len(combo) <= max_len]
 
     def extract_methylated_sequence(self, bam_file_path):
-        #Z, X, H, U for methylated; z, x, h, u for unmethylated
+        # Z, X, H, U for methylated; z, x, h, u for unmethylated
         dna_sequences = []
         methylation_tags = []
 
@@ -89,8 +89,8 @@ class Tokenizer:
                 m = 1
             # elif token in ['z', 'x', 'h', 'u']: #fix for cpg representation
             #     m = 0
-            else: #Implementing full bit approach because it contains positional information, and
-                #shouldn't have significant impacts on efficiency
+            else:  # Implementing full bit approach because it contains positional information, and
+                # shouldn't have significant impacts on efficiency
                 m = 0
 
             # six alphabets indicating cytosine methylation in bismark processed files
@@ -100,7 +100,7 @@ class Tokenizer:
 
         return methyl_seq
 
-    def bpe_merge(self, tokens:list, methyl_seq: list):
+    def bpe_merge(self, tokens: list, methyl_seq: list):
 
         tokens_copy = list(tokens)
         methyl_copy = list(methyl_seq)
@@ -164,7 +164,7 @@ class Tokenizer:
         merged_sequence_tokens, merged_methylation_tokens = self.bpe_merge(sequence, raw_methylation_tokens)
 
         input_ids, methylation_ids = self.encode(
-            merged_sequence_tokens, merged_methylation_tokens #
+            merged_sequence_tokens, merged_methylation_tokens
         )
 
         age_ids = self._get_age_id(age, len(input_ids))

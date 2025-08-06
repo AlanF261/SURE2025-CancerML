@@ -13,8 +13,7 @@ import torch.nn.functional as nnfunc
 # from transformers.file_utils import (
 #     add_code_sample_docstrings,
 #     add_start_docstrings,
-#     add_start_docstrings_to_model_forward,
-# )
+#     add_start_docstrings_to_model_forward)
 from transformers.modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     BaseModelOutputWithPoolingAndCrossAttentions,
@@ -105,17 +104,18 @@ class Embeddings(nn.Module):
 
     def __init__(self, config):
         super().__init__()
+        self.config = config
         self.word_embeddings = nn.Embedding(
-            config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id
+            self.config.vocab_size, self.config.hidden_size, padding_idx=config.pad_token_id
         )
 
         if config.emb_layer_norm_before:
             self.layer_norm = nn.LayerNorm(
-                config.hidden_size, eps=config.layer_norm_eps
+                self.config.hidden_size, eps=self.config.layer_norm_eps
             )
         else:
             self.layer_norm = None
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.dropout = nn.Dropout(self.config.hidden_dropout_prob)
 
         # self.register_buffer(
         #     "position_ids",
@@ -138,7 +138,7 @@ class Embeddings(nn.Module):
 
     def forward(
             self,
-            input_ids=None,
+            input_ids: Optional[torch.Tensor] = None,
             attention_mask=None,
             methylation_ids=None,
             age_ids=None,
@@ -165,9 +165,8 @@ class Embeddings(nn.Module):
             embeddings.masked_fill_(
                 (input_ids == self.mask_token_id).unsqueeze(-1), 0.0
             )
-            mask_ratio_train = (
-                    0.15 * 0.8
-            )  # Replace the hardcoding with modifications to config
+            # mask_ratio_train = (0.15 * 0.8)
+            mask_ratio_train = self.config.mask_ratio_train
             src_lengths = attention_mask.sum(-1)
             mask_ratio_observed = (input_ids == self.mask_token_id).sum(
                 -1
@@ -278,7 +277,7 @@ class AttentionCalculation(nn.Module):
             is_causal=False
         )
         # Replacing manual attention calculation with torch.nn.functional.scaled_dot_product_attention
-        # to potentially use flash attention if optimal, sigificantly improving performance
+        # to potentially use flash attention if optimal, significantly improving performance
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
         context_layer = context_layer.view(new_context_layer_shape)
@@ -438,58 +437,23 @@ class Layer(nn.Module):
         self_attention_outputs = self.attention(
             hidden_states,
             attention_mask,
+            encoder_hidden_states,
+            encoder_attention_mask,
             # head_mask,
             # output_attentions=output_attentions,
             past_key_value=self_attn_past_key_value,
         )
         attention_output = self_attention_outputs[0]
-
-        # if decoder, the last output is tuple of self-attn cache
-        if self.is_decoder:
-            outputs = self_attention_outputs[1:-1]
-            present_key_value = self_attention_outputs[-1]
-        else:
-            outputs = self_attention_outputs[
-                      1:
-                      ]  # add self attentions if we output attention weights
-
-        # cross_attn_present_key_value = None
-        if self.is_decoder and encoder_hidden_states is not None:
-            if not hasattr(self, "crossattention"):
-                raise AttributeError(
-                    f"If `encoder_hidden_states` are passed, {self} has to be instantiated"
-                    " with cross-attention layers by setting `config.add_cross_attention=True`"
-                )
-
-            # cross_attn cached key/values tuple is at positions 3,4 of past_key_value tuple
-            cross_attn_past_key_value = (
-                past_key_value[-2:] if past_key_value is not None else None
-            )
-            cross_attention_outputs = self.crossattention(
-                attention_output,
-                attention_mask,
-                # head_mask,
-                encoder_hidden_states,
-                encoder_attention_mask,
-                cross_attn_past_key_value,
-                # output_attentions,
-            )
-            attention_output = cross_attention_outputs[0]
-            outputs = (
-                    outputs + cross_attention_outputs[1:-1]
-            )  # add cross attentions if we output attention weights
-
-            # add cross-attn cache to positions 3,4 of present_key_value tuple
-            cross_attn_present_key_value = cross_attention_outputs[-1]
-            present_key_value = present_key_value + cross_attn_present_key_value
+        outputs = self_attention_outputs[1:]
+        #     present_key_value = present_key_value + cross_attn_present_key_value
 
         layer_output = self.feed_forward_chunk(attention_output)
 
         outputs = (layer_output,) + outputs
 
         # if decoder, return the attn key/values as the last output
-        if self.is_decoder:
-            outputs = outputs + (present_key_value,)
+        # if self.is_decoder:
+        #     outputs = outputs + (present_key_value,)
         return outputs
 
     def feed_forward_chunk(self, attention_output):
@@ -669,9 +633,9 @@ class Model(PreTrained):
 
         self.post_init()
 
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, Encoder):
-            module.gradient_checkpointing = value
+    # def _set_gradient_checkpointing(self, module, value=False):
+    #     if isinstance(module, Encoder):
+    #         module.gradient_checkpointing = value
 
     def get_input_embeddings(self):
         return self.embeddings.word_embeddings
@@ -723,7 +687,8 @@ class Model(PreTrained):
         device = input_ids.device if input_ids is not None else inputs_embeds.device
 
         if attention_mask is None:
-            attention_mask = torch.ones(((batch_size, seq_length)), device=device)
+            attention_mask = torch.ones((batch_size, seq_length), device=device)
+            # attention_mask = torch.ones(((batch_size, seq_length)), device=device)
 
         # Ensure attention_mask has the correct shape for broadcasting (batch_size, 1, 1, seq_length)
         extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(
@@ -801,7 +766,8 @@ class HierarchicalGenomeTransformer(PreTrained):
         batch_size, sequence_length = input_ids.shape
 
         # num_segments = (sequence_length - self.segment_length) // self.segment_stride + 1
-        num_segments = math.ceil((sequence_length - self.segment_length) / self.segment_stride) + 1 if sequence_length > self.segment_length else 1
+        num_segments = math.ceil((sequence_length - self.segment_length) / self.segment_stride) + 1 \
+            if sequence_length > self.segment_length else 1
 
         segment_embeddings_list = []
 
@@ -817,7 +783,8 @@ class HierarchicalGenomeTransformer(PreTrained):
                 padding_length = self.segment_length - current_segment_input_ids.shape[1]
                 current_segment_input_ids = torch.cat([
                     current_segment_input_ids,
-                    torch.full((batch_size, padding_length), self.config.pad_token_id, dtype=torch.long, device=input_ids.device)
+                    torch.full((batch_size, padding_length), self.config.pad_token_id, dtype=torch.long,
+                               device=input_ids.device)
                 ], dim=1)
                 current_segment_attention_mask = torch.cat([
                     current_segment_attention_mask,
@@ -825,7 +792,8 @@ class HierarchicalGenomeTransformer(PreTrained):
                 ], dim=1)
                 current_segment_methylation_ids = torch.cat([
                     current_segment_methylation_ids,
-                    torch.full((batch_size, padding_length), self.config.meth_pad_id, dtype=torch.long, device=methylation_ids.device)
+                    torch.full((batch_size, padding_length), self.config.meth_pad_id, dtype=torch.long,
+                               device=methylation_ids.device)
                 ], dim=1)
 
             lower_layer_output = self.lower_layer_transformer(
