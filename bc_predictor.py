@@ -752,6 +752,9 @@ class HierarchicalGenomeTransformer(BasePreTrainedModel):
 
         self.post_init()
 
+    def get_input_embeddings(self):
+        return self.lower_layer_transformer.get_input_embeddings()
+
     def forward(
             self,
             input_ids: Optional[torch.Tensor] = None,
@@ -771,17 +774,9 @@ class HierarchicalGenomeTransformer(BasePreTrainedModel):
         padded_attention_mask = nn.functional.pad(attention_mask, (0, padding_length), 'constant', 0)
         padded_methylation_ids = nn.functional.pad(methylation_ids, (0, padding_length), 'constant', self.config.meth_pad_id)
 
-        padded_input_ids = padded_input_ids.unsqueeze(1)
-        padded_attention_mask = padded_attention_mask.unsqueeze(1)
-        padded_methylation_ids = padded_methylation_ids.unsqueeze(1)
-
-        segmented_input_ids = padded_input_ids.unfold(dimension=2, size=segment_length, step=segment_stride)
-        segmented_attention_mask = padded_attention_mask.unfold(dimension=2, size=segment_length, step=segment_stride)
-        segmented_methylation_ids = padded_methylation_ids.unfold(dimension=2, size=segment_length, step=segment_stride)
-
-        segmented_input_ids = segmented_input_ids.transpose(1, 2).squeeze(1)
-        segmented_attention_mask = segmented_attention_mask.transpose(1, 2).squeeze(1)
-        segmented_methylation_ids = segmented_methylation_ids.transpose(1, 2).squeeze(1)
+        segmented_input_ids = padded_input_ids.unfold(dimension=1, size=segment_length, step=segment_stride)
+        segmented_attention_mask = padded_attention_mask.unfold(dimension=1, size=segment_length, step=segment_stride)
+        segmented_methylation_ids = padded_methylation_ids.unfold(dimension=1, size=segment_length, step=segment_stride)
 
         flat_input_ids = segmented_input_ids.reshape(-1, segment_length)
         flat_attention_mask = segmented_attention_mask.reshape(-1, segment_length)
@@ -806,12 +801,10 @@ class HierarchicalGenomeTransformer(BasePreTrainedModel):
             inputs_embeds=segment_embeddings,
             attention_mask=higher_layer_attention_mask,
             return_dict=True,
-            methylation_ids=None,
-            age_ids=age_ids,
+            age_ids=age_ids.unsqueeze(1).expand(batch_size, num_segments),
         )
 
         return higher_layer_output
-
 
 class LMHead(nn.Module):
 
@@ -851,6 +844,9 @@ class MaskedLM(BasePreTrainedModel):
         # self.init_weights()
         self.post_init()
 
+    def get_input_embeddings(self):
+        return self.model.get_input_embeddings()
+
     def get_output_embeddings(self):
         return self.lm_head.decoder
 
@@ -871,6 +867,7 @@ class MaskedLM(BasePreTrainedModel):
             output_hidden_states: Optional[bool] = None,
             return_dict: Optional[bool] = None,
             methylation_ids: Optional[torch.Tensor] = None,
+            age_ids: Optional[torch.Tensor] = None,
     ) -> Union[Tuple, MaskedLMOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -895,7 +892,8 @@ class MaskedLM(BasePreTrainedModel):
             # output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            methylation_ids=methylation_ids
+            methylation_ids=methylation_ids,
+            age_ids=age_ids,
         )
         sequence_output = outputs[0]
         prediction_scores = self.lm_head(sequence_output)
