@@ -781,7 +781,7 @@ class HierarchicalGenomeTransformer(PreTrained):
     def __init__(self, config):
         super().__init__(config)
 
-        self.lower_layer_transformer = Model(config, add_pooling_layer=False)
+        self.lower_layer_transformer = Model(config, add_pooling_layer=True)
 
         self.higher_layer_transformer = Model(config, add_pooling_layer=True)
 
@@ -834,11 +834,13 @@ class HierarchicalGenomeTransformer(PreTrained):
                 return_dict=True,
                 methylation_ids=current_segment_methylation_ids,
                 age_ids=age_ids,
+
                 # head_mask=head_mask,
             )
 
-            segment_representation = lower_layer_output.last_hidden_state.mean(dim=1)  # Shape: (batch_size, hidden_size)
-            segment_embeddings_list.append(segment_representation)
+            # segment_representation = lower_layer_output.last_hidden_state.mean(dim=1)
+            # segment_embeddings_list.append(segment_representation)
+            segment_embeddings_list.append(lower_layer_output.pooler_output)
 
         higher_layer_input_embeds = torch.stack(segment_embeddings_list, dim=1)
 
