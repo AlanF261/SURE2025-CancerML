@@ -1,6 +1,7 @@
-#Taken from Nucleotide Transformer v2 with modifications
+# Taken from Nucleotide Transformer v2 with modifications
 
 from transformers import PretrainedConfig
+
 
 class Config(PretrainedConfig):
 
@@ -17,7 +18,7 @@ class Config(PretrainedConfig):
             intermediate_size=3072,
             hidden_dropout_prob=0.1,
             attention_probs_dropout_prob=0.1,
-            attention_probs_secondary_dropout=0, #0 because nn.func already applies dropout
+            # attention_probs_secondary_dropout=0, #0 because nn.func already applies dropout
             # max_position_embeddings=1026,
             initializer_range=0.02,
             layer_norm_eps=1e-12,
@@ -62,4 +63,4 @@ class Config(PretrainedConfig):
         # self.segment_length = segment_length
         # self.segment_stride = segment_stride
         self.max_methylation_embeddings = max_methylation_embeddings
-        self.age_unk_id = age_unk_id
+        self.age_pad_id = age_pad_id
