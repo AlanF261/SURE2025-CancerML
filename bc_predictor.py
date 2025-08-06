@@ -800,7 +800,8 @@ class HierarchicalGenomeTransformer(PreTrained):
     ):
         batch_size, sequence_length = input_ids.shape
 
-        num_segments = (sequence_length - self.segment_length) // self.segment_stride + 1
+        # num_segments = (sequence_length - self.segment_length) // self.segment_stride + 1
+        num_segments = math.ceil((sequence_length - self.segment_length) / self.segment_stride) + 1 if sequence_length > self.segment_length else 1
 
         segment_embeddings_list = []
 
