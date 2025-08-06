@@ -18,7 +18,7 @@ class Config(PretrainedConfig):
             intermediate_size=3072,
             hidden_dropout_prob=0.1,
             attention_probs_dropout_prob=0.1,
-            # attention_probs_secondary_dropout=0, #0 because nn.func already applies dropout
+            attention_probs_secondary_dropout=0, #0 because nn.func already applies dropout
             # max_position_embeddings=1026,
             initializer_range=0.02,
             layer_norm_eps=1e-12,
@@ -53,6 +53,7 @@ class Config(PretrainedConfig):
         self.intermediate_size = intermediate_size
         self.hidden_dropout_prob = hidden_dropout_prob
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
+        self.attention_probs_secondary_dropout = attention_probs_secondary_dropout
         # self.max_position_embeddings = max_position_embeddings
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
