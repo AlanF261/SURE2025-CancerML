@@ -511,7 +511,7 @@ class Encoder(nn.Module):
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
                         # return module(*inputs, past_key_value, output_attentions)
-                        return module(*inputs, past_key_value)
+                        return module(*inputs)
 
                     return custom_forward
 
@@ -757,69 +757,57 @@ class HierarchicalGenomeTransformer(BasePreTrainedModel):
             input_ids: Optional[torch.Tensor] = None,
             methylation_ids: Optional[torch.Tensor] = None,
             attention_mask: Optional[torch.Tensor] = None,
-            # head_mask: Optional[torch.Tensor] = None,
             age_ids: Optional[torch.Tensor] = None,
     ):
         batch_size, sequence_length = input_ids.shape
+        segment_length = self.segment_length
+        segment_stride = self.segment_stride
 
-        # num_segments = (sequence_length - self.segment_length) // self.segment_stride + 1
-        num_segments = math.ceil((sequence_length - self.segment_length) / self.segment_stride) + 1 \
-            if sequence_length > self.segment_length else 1
+        padding_length = 0
+        if (sequence_length - segment_length) % segment_stride != 0:
+            padding_length = segment_stride - ((sequence_length - segment_length) % segment_stride)
 
-        segment_embeddings_list = []
+        padded_input_ids = nn.functional.pad(input_ids, (0, padding_length), 'constant', self.config.pad_token_id)
+        padded_attention_mask = nn.functional.pad(attention_mask, (0, padding_length), 'constant', 0)
+        padded_methylation_ids = nn.functional.pad(methylation_ids, (0, padding_length), 'constant', self.config.meth_pad_id)
 
-        for i in range(num_segments):
-            start_idx = i * self.segment_stride
-            end_idx = start_idx + self.segment_length
+        padded_input_ids = padded_input_ids.unsqueeze(1)
+        padded_attention_mask = padded_attention_mask.unsqueeze(1)
+        padded_methylation_ids = padded_methylation_ids.unsqueeze(1)
 
-            current_segment_input_ids = input_ids[:, start_idx:end_idx]
-            current_segment_attention_mask = attention_mask[:, start_idx:end_idx]
-            current_segment_methylation_ids = methylation_ids[:, start_idx:end_idx]
+        segmented_input_ids = padded_input_ids.unfold(dimension=2, size=segment_length, step=segment_stride)
+        segmented_attention_mask = padded_attention_mask.unfold(dimension=2, size=segment_length, step=segment_stride)
+        segmented_methylation_ids = padded_methylation_ids.unfold(dimension=2, size=segment_length, step=segment_stride)
 
-            if current_segment_input_ids.shape[1] < self.segment_length:
-                padding_length = self.segment_length - current_segment_input_ids.shape[1]
-                current_segment_input_ids = torch.cat([
-                    current_segment_input_ids,
-                    torch.full((batch_size, padding_length), self.config.pad_token_id, dtype=torch.long,
-                               device=input_ids.device)
-                ], dim=1)
-                current_segment_attention_mask = torch.cat([
-                    current_segment_attention_mask,
-                    torch.zeros((batch_size, padding_length), dtype=torch.long, device=attention_mask.device)
-                ], dim=1)
-                current_segment_methylation_ids = torch.cat([
-                    current_segment_methylation_ids,
-                    torch.full((batch_size, padding_length), self.config.meth_pad_id, dtype=torch.long,
-                               device=methylation_ids.device)
-                ], dim=1)
+        segmented_input_ids = segmented_input_ids.transpose(1, 2).squeeze(1)
+        segmented_attention_mask = segmented_attention_mask.transpose(1, 2).squeeze(1)
+        segmented_methylation_ids = segmented_methylation_ids.transpose(1, 2).squeeze(1)
 
-            lower_layer_output = self.lower_layer_transformer(
-                input_ids=current_segment_input_ids,
-                attention_mask=current_segment_attention_mask,
-                output_hidden_states=True,
-                return_dict=True,
-                methylation_ids=current_segment_methylation_ids,
-                # age_ids=age_ids,
+        flat_input_ids = segmented_input_ids.reshape(-1, segment_length)
+        flat_attention_mask = segmented_attention_mask.reshape(-1, segment_length)
+        flat_methylation_ids = segmented_methylation_ids.reshape(-1, segment_length)
 
-                # head_mask=head_mask,
-            )
+        lower_layer_output = self.lower_layer_transformer(
+            input_ids=flat_input_ids,
+            attention_mask=flat_attention_mask,
+            output_hidden_states=True,
+            return_dict=True,
+            methylation_ids=flat_methylation_ids,
+        )
 
-            # segment_representation = lower_layer_output.last_hidden_state.mean(dim=1)
-            # segment_embeddings_list.append(segment_representation)
-            segment_embeddings_list.append(lower_layer_output.pooler_output)
-
-        higher_layer_input_embeds = torch.stack(segment_embeddings_list, dim=1)
+        num_segments = segmented_input_ids.shape[1]
+        segment_embeddings = lower_layer_output.pooler_output.view(batch_size, num_segments, -1)
 
         higher_layer_attention_mask = torch.ones(
             batch_size, num_segments, dtype=torch.long, device=input_ids.device
         )
 
         higher_layer_output = self.higher_layer_transformer(
-            inputs_embeds=higher_layer_input_embeds,
+            inputs_embeds=segment_embeddings,
             attention_mask=higher_layer_attention_mask,
             return_dict=True,
             methylation_ids=None,
-            age_ids=age_ids,  #age_ids moved to individual level representation
+            age_ids=age_ids,
         )
 
         return higher_layer_output
