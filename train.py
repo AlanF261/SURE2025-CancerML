@@ -52,7 +52,7 @@ training_args = TrainingArguments(
     logging_steps=500,
     report_to="none",
     learning_rate=5e-5,
-    lr_scheduler_type="lambda_lr",
+    lr_scheduler_type="warmup_stable_decay",
     warmup_steps=0,
 )
 
