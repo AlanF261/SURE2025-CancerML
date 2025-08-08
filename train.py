@@ -52,7 +52,7 @@ training_args = TrainingArguments(
     logging_steps=500,
     report_to="none",
     learning_rate=5e-5,
-    lr_scheduler_type="linear",
+    lr_scheduler_type="lambda_lr",
     warmup_steps=0,
 )
 
@@ -60,15 +60,16 @@ num_training_steps = (int(len(train_dataset) / training_args.per_device_train_ba
                       training_args.num_train_epochs)
 warmup_steps = int(num_training_steps * 0.1)
 
+training_args.warmup_steps = warmup_steps
+
 def custom_scheduler(optimizer, num_training_steps):
     return create_scheduler(
         optimizer,
-        num_warmup_steps=warmup_steps,
+        num_warmup_steps=training_args.warmup_steps, # Use the updated warmup_steps
         num_train_steps=num_training_steps,
         lr_start=training_args.learning_rate,
         lr_end_decay=1e-8
     )
-
 
 trainer = Trainer(
     model=model,
@@ -76,7 +77,6 @@ trainer = Trainer(
     train_dataset=train_dataset,
     data_collator=default_data_collator,
     tokenizer=tokenizer,
-    create_scheduler=custom_scheduler,
 )
 
 print("Starting training.")
