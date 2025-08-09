@@ -78,6 +78,8 @@ class LineByLineTextDataset(Dataset):
                         "age_ids": torch.tensor(age_ids, dtype=torch.long),
                         "attention_mask": torch.tensor(attention_mask, dtype=torch.long),
                     })
+                if not self.examples:
+                    print("Warning: The dataset is empty. No examples were created.")
 
             with open(cached_features_file, "wb") as handle:
                 torch.save(self.examples, handle)
