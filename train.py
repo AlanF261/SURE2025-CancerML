@@ -19,8 +19,7 @@ model = MaskedLM(model_config)
 # if hasattr(model,'lm_head') and hasattr(model.lm_head,'decoder') and hasattr(model.ntv2.embeddings,'word_embeddings'):
 #     model.lm_head.decoder.weight = model.ntv2.embeddings.word_embeddings.weight
 
-input_filepath = ("/home/alanf/scratch/breastCancerDataset/aligned_sequences/"
-                  "encode_aligned/wgEncodeHaibMethylRrbsPanisletsDukeRawDataRep1_bismark_bt2.bam")
+input_filepath = ("/home/alanf/scratch/breastCancerDataset/scripts/cohorts/encode_one.txt")
 
 train_dataset = LineByLineTextDataset(
     tokenizer=tokenizer,

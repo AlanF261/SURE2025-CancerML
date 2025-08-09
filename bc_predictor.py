@@ -7,7 +7,7 @@ from typing import Optional, Tuple, Union
 import torch
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss, SiLU
+# from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss, SiLU
 from torch.nn import CrossEntropyLoss, SiLU
 import torch.nn.functional as nnfunc
 # from transformers.file_utils import (
@@ -929,7 +929,8 @@ class CancerClassificationModel(BasePreTrainedModel):
             nn.Dropout(config.hidden_dropout_prob),
             nn.Linear(config.hidden_size, config.num_labels)
         )
-        self.loss_fct = BCEWithLogitsLoss()
+        # self.loss_fct = BCEWithLogitsLoss()
+        self.loss_fct = CrossEntropyLoss()
 
     def forward(
             self,
@@ -959,7 +960,7 @@ class CancerClassificationModel(BasePreTrainedModel):
             methylation_ids=methylation_ids,
             age_ids=age_ids,
         )
-        sequence_output = outputs[0]
+        sequence_output = outputs.pooler_output
 
         logits = self.classifier(sequence_output)
 
