@@ -78,6 +78,9 @@ class Tokenizer:
                         methylation_tags.append(read.get_tag('XM'))
         except Exception as e:
             print(f"Error processing BAM file: {e}")
+
+        print(f"Number of sequences extracted: {len(dna_sequences)}")
+        print(f"Number of methylation tags extracted: {len(methylation_tags)}")
         return dna_sequences, methylation_tags
 
     def convert_meth(self, meth_seq: List):
@@ -169,7 +172,11 @@ class Tokenizer:
 
         age_ids = self._get_age_id(age, len(input_ids))
 
-        # Step 6: Return the final tokenized outputs
+        print(f"Tokenized output for {bam_file_path}:")
+        print(f"  input_ids length: {len(input_ids)}")
+        print(f"  methylation_ids length: {len(methylation_ids)}")
+        print(f"  age_ids length: {len(age_ids)}")
+
         return {
             "input_ids": input_ids,
             "methylation_ids": methylation_ids,

@@ -1,7 +1,7 @@
 import torch
 from torch.utils.data import Dataset
 import os
-import collections
+# import collections
 from collections.abc import Mapping
 
 from data_processing import Tokenizer
@@ -87,5 +87,5 @@ class LineByLineTextDataset(Dataset):
     def __len__(self):
         return len(self.examples)
 
-    def __getitem__(self, i) -> collections.abc.Mapping[str, torch.Tensor]:
+    def __getitem__(self, i) -> Mapping[str, torch.Tensor]:
         return self.examples[i]
