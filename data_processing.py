@@ -34,12 +34,13 @@ class Tokenizer(PreTrainedTokenizer):
             elif token_content == "[PAD]":
                 special_tokens["pad_token"] = token_content
 
-        super().__init__(**special_tokens, **kwargs)
 
         self.config = self.tokenizer_config
         self.vocab = self.tokenizer_config.get("model", {}).get("vocab", {})
         self.merges = [tuple(merge.split(" ")) for merge in self.tokenizer_config.get("model", {}).get("merges", [])]
         self.added_tokens = self.tokenizer_config.get("added_tokens", [])
+
+        super().__init__(**special_tokens, **kwargs)
 
         self.meth_pad_id = 0  # hard coded for now, fix later
         self.max_age_embeddings = self.tokenizer_config.get("max_age_embeddings", 100)
