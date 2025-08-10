@@ -4,6 +4,7 @@ import pysam
 import json
 from typing import Optional, List
 from transformers import PreTrainedTokenizer
+import os
 
 
 class Tokenizer(PreTrainedTokenizer):
@@ -101,14 +102,14 @@ class Tokenizer(PreTrainedTokenizer):
                     self.methylation_vocab[add_0] = current_id
                     # self.methylation_vocab[current_id] = add_0
                     current_id += 1
-                    current_id += 1
+                    # current_id += 1
                 vocab_additions.append(add_0)
 
                 if add_1 not in self.methylation_vocab.values():
                     self.methylation_vocab[add_1] = current_id
                     # self.methylation_vocab[current_id] = add_1
                     current_id += 1
-                    current_id += 1
+                    # current_id += 1
                 vocab_additions.append(add_1)
 
             current_combinations = [combo for combo in vocab_additions if len(combo) <= max_len]
@@ -274,7 +275,28 @@ class Tokenizer(PreTrainedTokenizer):
             raise ValueError("A 'bam_file_path' must be provided.")
 
         age = kwargs.pop("age", None)
-        return self.process_bam_file(bam_file_path, age)
+        return self.process_bam(bam_file_path, age)
+
+    def _tokenize(self, text: str, **kwargs) -> List[str]:
+        return list(text)
+
+    def _convert_token_to_id(self, token: str) -> int:
+        return self.vocab.get(token, self.unk_token_id)
+
+    def _convert_id_to_token(self, index: int) -> str:
+        return self.ids_to_tokens.get(index, self.unk_token)
+
+    def get_vocab_size(self) -> int:
+        return len(self.vocab)
+
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
+        output_file_path = os.path.join(save_directory, f"{filename_prefix or ''}vocab.json")
+        with open(output_file_path, "w", encoding="utf-8") as f:
+            json.dump(self.vocab, f, indent=2)
+        return (output_file_path,)
+
+    def get_vocab(self) -> dict[str, int]:
+        return self.vocab
 
 
 def get_pairs(tokens):
