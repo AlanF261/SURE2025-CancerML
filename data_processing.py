@@ -7,37 +7,78 @@ from transformers import PreTrainedTokenizer
 
 
 class Tokenizer(PreTrainedTokenizer):
-    def __init__(self, tokenizer_config_path):
-
+    def __init__(self, tokenizer_config_path, **kwargs):
         try:
             with open(tokenizer_config_path, 'r', encoding='utf-8') as f:
                 self.tokenizer_config = json.load(f)
         except Exception as e:
             print(f"Error with loading tokenizer config: {e}")
 
+        special_tokens_map = {token["content"]: token["id"] for token in self.tokenizer_config.get("added_tokens", []) if token.get("special")}
+
+        special_tokens = {
+            "unk_token": "[UNK]",
+            "cls_token": "[CLS]",
+            "sep_token": "[SEP]",
+            "pad_token": "[PAD]",
+        }
+
+        for token_content, token_id in special_tokens_map.items():
+            if token_content == "[UNK]":
+                special_tokens["unk_token"] = token_content
+            elif token_content == "[CLS]":
+                special_tokens["cls_token"] = token_content
+            elif token_content == "[SEP]":
+                special_tokens["sep_token"] = token_content
+            elif token_content == "[PAD]":
+                special_tokens["pad_token"] = token_content
+
+        super().__init__(**special_tokens, **kwargs)
+
         self.config = self.tokenizer_config
         self.vocab = self.tokenizer_config.get("model", {}).get("vocab", {})
-        self.merges = [tuple(merge.split(" ")) for merge in self.tokenizer_config.get("model", {}).get("merges", {})]
+        self.merges = [tuple(merge.split(" ")) for merge in self.tokenizer_config.get("model", {}).get("merges", [])]
         self.added_tokens = self.tokenizer_config.get("added_tokens", [])
-        self.special_tokens_map = {token["content"]: token["id"] for token in self.added_tokens if token.get("special")}
 
-        self.unk_token = "[UNK]"
-        self.unk_token_id = self.special_tokens_map.get(self.unk_token, 0)
-        self.cls_token = "[CLS]"
-        self.cls_token_id = self.special_tokens_map.get(self.cls_token, 1)
-        self.sep_token = "[SEP]"
-        self.sep_token_id = self.special_tokens_map.get(self.sep_token, 2)
-        self.pad_token = "[PAD]"
-        self.pad_token_id = self.special_tokens_map.get(self.pad_token, 3)
         self.meth_pad_id = 0  # hard coded for now, fix later
-
-        # self.single_template = self.tokenizer_config.get("post_processor", {}).get("single", [])
-        # self.pair_template = self.tokenizer_config.get("post_processor", {}).get("pair", [])
-
         self.max_age_embeddings = self.tokenizer_config.get("max_age_embeddings", 100)
         self.age_unk_id = self.tokenizer_config.get("age_unk_id", 0)
 
+        self.unk_token_id = self.vocab.get(self.unk_token, self.unk_token_id)
+        self.cls_token_id = self.vocab.get(self.cls_token, self.cls_token_id)
+        self.sep_token_id = self.vocab.get(self.sep_token, self.sep_token_id)
+        self.pad_token_id = self.vocab.get(self.pad_token, self.pad_token_id)
+
         self.methylation_vocab = self._generate_default_methylation_vocab()
+        # try:
+        #     with open(tokenizer_config_path, 'r', encoding='utf-8') as f:
+        #         self.tokenizer_config = json.load(f)
+        # except Exception as e:
+        #     print(f"Error with loading tokenizer config: {e}")
+        #
+        # self.config = self.tokenizer_config
+        # self.vocab = self.tokenizer_config.get("model", {}).get("vocab", {})
+        # self.merges = [tuple(merge.split(" ")) for merge in self.tokenizer_config.get("model", {}).get("merges", {})]
+        # self.added_tokens = self.tokenizer_config.get("added_tokens", [])
+        # # self.special_tokens_map = {token["content"]: token["id"] for token in self.added_tokens if token.get("special")}
+        #
+        # self.unk_token = "[UNK]"
+        # self.unk_token_id = self.special_tokens_map.get(self.unk_token, 0)
+        # self.cls_token = "[CLS]"
+        # self.cls_token_id = self.special_tokens_map.get(self.cls_token, 1)
+        # self.sep_token = "[SEP]"
+        # self.sep_token_id = self.special_tokens_map.get(self.sep_token, 2)
+        # self.pad_token = "[PAD]"
+        # self.pad_token_id = self.special_tokens_map.get(self.pad_token, 3)
+        # self.meth_pad_id = 0  # hard coded for now, fix later
+        #
+        # # self.single_template = self.tokenizer_config.get("post_processor", {}).get("single", [])
+        # # self.pair_template = self.tokenizer_config.get("post_processor", {}).get("pair", [])
+        #
+        # self.max_age_embeddings = self.tokenizer_config.get("max_age_embeddings", 100)
+        # self.age_unk_id = self.tokenizer_config.get("age_unk_id", 0)
+        #
+        # self.methylation_vocab = self._generate_default_methylation_vocab()
 
     def _generate_default_methylation_vocab(self, max_len=16):
         self.methylation_vocab = {}
@@ -179,7 +220,7 @@ class Tokenizer(PreTrainedTokenizer):
         final_tokens = [token if token in self.vocab else self.unk_token for token in tokens_copy]
         return final_tokens, methyl_copy
 
-    def encode(self, sequence_tokens: list, methylation_tokens: list):
+    def methyl_encode(self, sequence_tokens: list, methylation_tokens: list):
         word_token_ids = []
         for token in sequence_tokens:
             word_token_ids.append(self.vocab.get(token, self.unk_token_id))
@@ -198,7 +239,7 @@ class Tokenizer(PreTrainedTokenizer):
 
         return [age_id_value] * sequence_length
 
-    def __call__(self, bam_file_path, age: Optional[int] = None):
+    def process_bam(self, bam_file_path, age: Optional[int] = None):
 
         sequence, methylation_seq = self.extract_methylated_sequence(bam_file_path)
 
@@ -206,7 +247,7 @@ class Tokenizer(PreTrainedTokenizer):
 
         merged_sequence_tokens, merged_methylation_tokens = self.bpe_merge(sequence, raw_methylation_tokens)
 
-        input_ids, methylation_ids = self.encode(
+        input_ids, methylation_ids = self.methyl_encode(
             merged_sequence_tokens, merged_methylation_tokens
         )
 
@@ -222,6 +263,18 @@ class Tokenizer(PreTrainedTokenizer):
             "methylation_ids": methylation_ids,
             "age_ids": age_ids,
         }
+
+    def __call__(self, *args, **kwargs):
+        if "bam_file_path" in kwargs:
+            bam_file_path = kwargs.pop("bam_file_path")
+        elif len(args) > 0:
+            bam_file_path = args[0]
+            args = args[1:]
+        else:
+            raise ValueError("A 'bam_file_path' must be provided.")
+
+        age = kwargs.pop("age", None)
+        return self.process_bam_file(bam_file_path, age)
 
 
 def get_pairs(tokens):
