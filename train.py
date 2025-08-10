@@ -1,6 +1,8 @@
 import torch
 # import os
-from transformers import TrainingArguments, Trainer, default_data_collator
+from transformers import TrainingArguments, Trainer, DataCollatorForLanguageModeling
+# from transformers import TrainingArguments, Trainer, default_data_collator, DataCollatorForLanguageModeling
+
 
 from config import Config
 from bc_predictor import MaskedLM
@@ -51,7 +53,7 @@ training_args = TrainingArguments(
     logging_steps=500,
     report_to="none",
     learning_rate=5e-5,
-    lr_scheduler_type="warmup_stable_decay",
+    lr_scheduler_type="polynomial",
     warmup_steps=0,
 )
 
@@ -61,20 +63,26 @@ warmup_steps = int(num_training_steps * 0.1)
 
 training_args.warmup_steps = warmup_steps
 
-def custom_scheduler(optimizer, num_training_steps):
-    return create_scheduler(
-        optimizer,
-        num_warmup_steps=training_args.warmup_steps, # Use the updated warmup_steps
-        num_train_steps=num_training_steps,
-        lr_start=training_args.learning_rate,
-        lr_end_decay=1e-8
-    )
+# def custom_scheduler(optimizer, num_training_steps):
+#     return create_scheduler(
+#         optimizer,
+#         num_warmup_steps=training_args.warmup_steps, # Use the updated warmup_steps
+#         num_train_steps=num_training_steps,
+#         lr_start=training_args.learning_rate,
+#         lr_end_decay=1e-8
+#     )
+
+data_collator = DataCollatorForLanguageModeling(
+    tokenizer=tokenizer,
+    mlm=True,
+    mlm_probability=0.15
+)
 
 trainer = Trainer(
     model=model,
     args=training_args,
     train_dataset=train_dataset,
-    data_collator=default_data_collator,
+    data_collator=data_collator,
     tokenizer=tokenizer,
 )
 

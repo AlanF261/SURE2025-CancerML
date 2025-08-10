@@ -3,9 +3,10 @@
 import pysam
 import json
 from typing import Optional, List
+from transformers import PreTrainedTokenizer
 
 
-class Tokenizer:
+class Tokenizer(PreTrainedTokenizer):
     def __init__(self, tokenizer_config_path):
 
         try:
@@ -36,6 +37,8 @@ class Tokenizer:
         self.max_age_embeddings = self.tokenizer_config.get("max_age_embeddings", 100)
         self.age_unk_id = self.tokenizer_config.get("age_unk_id", 0)
 
+        self.methylation_vocab = self._generate_default_methylation_vocab()
+
     def _generate_default_methylation_vocab(self, max_len=16):
         self.methylation_vocab = {}
         current_id = 1
@@ -54,16 +57,21 @@ class Tokenizer:
                 add_1 = previous_vocab + '1'
 
                 if add_0 not in self.methylation_vocab.values():
-                    self.methylation_vocab[current_id] = add_0
+                    self.methylation_vocab[add_0] = current_id
+                    # self.methylation_vocab[current_id] = add_0
+                    current_id += 1
                     current_id += 1
                 vocab_additions.append(add_0)
 
                 if add_1 not in self.methylation_vocab.values():
-                    self.methylation_vocab[current_id] = add_1
+                    self.methylation_vocab[add_1] = current_id
+                    # self.methylation_vocab[current_id] = add_1
+                    current_id += 1
                     current_id += 1
                 vocab_additions.append(add_1)
 
             current_combinations = [combo for combo in vocab_additions if len(combo) <= max_len]
+        return self.methylation_vocab
 
     def extract_methylated_sequence(self, bam_file_path):
         # Z, X, H, U for methylated; z, x, h, u for unmethylated
@@ -82,6 +90,7 @@ class Tokenizer:
         print(f"Number of sequences extracted: {len(dna_sequences)}")
         print(f"Number of methylation tags extracted: {len(methylation_tags)}")
         return dna_sequences, methylation_tags
+        # return "".join(dna_sequences), "".join(methylation_tags)
 
     def convert_meth(self, meth_seq: List):
         methyl_seq = list()
@@ -103,41 +112,72 @@ class Tokenizer:
 
         return methyl_seq
 
+    # def bpe_merge(self, tokens: list, methyl_seq: list):
+    #
+    #     tokens_copy = list(tokens)
+    #     methyl_copy = list(methyl_seq)
+    #
+    #     while True:
+    #         best_merge = None
+    #
+    #         for merge_idx, (p1, p2) in enumerate(self.merges):
+    #             for i in range(len(tokens_copy) - 1):
+    #                 if tokens_copy[i] == p1 and tokens_copy[i+1] == p2:
+    #                     if best_merge is None or merge_idx < best_merge[0]:
+    #                         best_merge = (merge_idx, i)
+    #
+    #         if best_merge is None:
+    #             break
+    #
+    #         _, i = best_merge
+    #
+    #         merged_token = "".join(tokens_copy[i:i+2])
+    #         tokens_copy[i:i+2] = [merged_token]
+    #
+    #         merged_methyl = "".join(methyl_copy[i:i+2])
+    #         methyl_copy[i:i+2] = [merged_methyl]
+    #
+    #     final_tokens = []
+    #     final_methyl = []
+    #     for i, token in enumerate(tokens_copy):
+    #         if token not in self.vocab:
+    #             final_tokens.append(self.unk_token)
+    #         else:
+    #             final_tokens.append(token)
+    #         final_methyl.append(methyl_copy[i])
+    #
+    #     return final_tokens, final_methyl
+
     def bpe_merge(self, tokens: list, methyl_seq: list):
+        if not tokens:
+            return [], []
 
         tokens_copy = list(tokens)
         methyl_copy = list(methyl_seq)
 
-        while True:
-            best_merge = None
+        for merge in self.merges:  # Process merges in order
+            new_tokens = []
+            new_methyl = []
+            i = 0
 
-            for merge_idx, (p1, p2) in enumerate(self.merges):
-                for i in range(len(tokens_copy) - 1):
-                    if tokens_copy[i] == p1 and tokens_copy[i+1] == p2:
-                        if best_merge is None or merge_idx < best_merge[0]:
-                            best_merge = (merge_idx, i)
+            while i < len(tokens_copy):
+                if (i < len(tokens_copy) - 1 and
+                    tokens_copy[i] == merge[0] and
+                    tokens_copy[i + 1] == merge[1]):
 
-            if best_merge is None:
-                break
+                    new_tokens.append(merge[0] + merge[1])
+                    new_methyl.append(methyl_copy[i] + methyl_copy[i + 1])
+                    i += 2
+                else:
+                    new_tokens.append(tokens_copy[i])
+                    new_methyl.append(methyl_copy[i])
+                    i += 1
 
-            _, i = best_merge
+            tokens_copy = new_tokens
+            methyl_copy = new_methyl
 
-            merged_token = "".join(tokens_copy[i:i+2])
-            tokens_copy[i:i+2] = [merged_token]
-
-            merged_methyl = "".join(methyl_copy[i:i+2])
-            methyl_copy[i:i+2] = [merged_methyl]
-
-        final_tokens = []
-        final_methyl = []
-        for i, token in enumerate(tokens_copy):
-            if token not in self.vocab:
-                final_tokens.append(self.unk_token)
-            else:
-                final_tokens.append(token)
-            final_methyl.append(methyl_copy[i])
-
-        return final_tokens, final_methyl
+        final_tokens = [token if token in self.vocab else self.unk_token for token in tokens_copy]
+        return final_tokens, methyl_copy
 
     def encode(self, sequence_tokens: list, methylation_tokens: list):
         word_token_ids = []
@@ -182,3 +222,13 @@ class Tokenizer:
             "methylation_ids": methylation_ids,
             "age_ids": age_ids,
         }
+
+
+def get_pairs(tokens):
+    pairs = set()
+    prev_token = tokens[0]
+    for token in tokens[1:]:
+        pairs.add((prev_token, token))
+        prev_token = token
+    return pairs
+

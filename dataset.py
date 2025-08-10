@@ -50,34 +50,29 @@ class LineByLineTextDataset(Dataset):
                 print(f"Processing {bam_file_path}...")
                 tokenized_data = self.tokenizer(bam_file_path)
 
-                input_ids_list = tokenized_data["input_ids"]
-                methylation_ids_list = tokenized_data["methylation_ids"]
-                age_ids_list = tokenized_data["age_ids"]
+                input_ids = tokenized_data["input_ids"]
+                methylation_ids = tokenized_data["methylation_ids"]
+                age_ids = tokenized_data["age_ids"]
 
-                for i in range(len(input_ids_list)):
-                    input_ids = input_ids_list[i]
-                    methylation_ids = methylation_ids_list[i]
-                    age_ids = age_ids_list[i]
+                current_len = len(input_ids)
+                if current_len < self.block_size:
+                    padding_len = self.block_size - current_len
+                    input_ids += [self.tokenizer.pad_token_id] * padding_len
+                    methylation_ids += [self.tokenizer.meth_pad_id] * padding_len
+                    age_ids += [self.tokenizer.age_unk_id] * padding_len
+                elif current_len > self.block_size:
+                    input_ids = input_ids[:self.block_size]
+                    methylation_ids = methylation_ids[:self.block_size]
+                    age_ids = age_ids[:self.block_size]
 
-                    current_len = len(input_ids)
-                    if current_len < self.block_size:
-                        padding_len = self.block_size - current_len
-                        input_ids = input_ids + [self.tokenizer.pad_token_id] * padding_len
-                        methylation_ids = methylation_ids + [self.tokenizer.meth_pad_id] * padding_len
-                        age_ids = age_ids + [self.tokenizer.age_unk_id] * padding_len
-                    elif current_len > self.block_size:
-                        input_ids = input_ids[:self.block_size]
-                        methylation_ids = methylation_ids[:self.block_size]
-                        age_ids = age_ids[:self.block_size]
+                attention_mask = [1] * min(current_len, self.block_size) + [0] * max(0, self.block_size - current_len)
 
-                    attention_mask = [1] * min(current_len, self.block_size) + [0]*max(0, self.block_size - current_len)
-
-                    self.examples.append({
-                        "input_ids": torch.tensor(input_ids, dtype=torch.long),
-                        "methylation_ids": torch.tensor(methylation_ids, dtype=torch.long),
-                        "age_ids": torch.tensor(age_ids, dtype=torch.long),
-                        "attention_mask": torch.tensor(attention_mask, dtype=torch.long),
-                    })
+                self.examples.append({
+                    "input_ids": torch.tensor(input_ids, dtype=torch.long),
+                    "methylation_ids": torch.tensor(methylation_ids, dtype=torch.long),
+                    "age_ids": torch.tensor(age_ids, dtype=torch.long),
+                    "attention_mask": torch.tensor(attention_mask, dtype=torch.long),
+                })
                 if not self.examples:
                     print("Warning: The dataset is empty. No examples were created.")
 

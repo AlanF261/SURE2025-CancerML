@@ -9,7 +9,7 @@ class Config(PretrainedConfig):
 
     def __init__(
             self,
-            vocab_size=4095,
+            vocab_size=4096,
             mask_token_id=4,
             pad_token_id=3,
             hidden_size=768,

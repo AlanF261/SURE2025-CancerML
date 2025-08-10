@@ -595,7 +595,7 @@ class BasePreTrainedModel(PreTrainedModel):
     config_class = Config
     base_model_prefix = "bc_predictor"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["EncoderLayer"]
+    _no_split_modules = ["Layer"]
 
     # Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel._init_weights
     def _init_weights(self, module):
@@ -801,7 +801,7 @@ class HierarchicalGenomeTransformer(BasePreTrainedModel):
             inputs_embeds=segment_embeddings,
             attention_mask=higher_layer_attention_mask,
             return_dict=True,
-            age_ids=age_ids.unsqueeze(1).expand(batch_size, num_segments),
+            age_ids=age_ids[:, 0].unsqueeze(-1).expand(-1, num_segments) if age_ids is not None else None,
         )
 
         return higher_layer_output
@@ -838,7 +838,7 @@ class MaskedLM(BasePreTrainedModel):
                 "bi-directional self-attention."
             )
 
-        self.model = HierarchicalGenomeTransformer(config)
+        self.model = Model(config, add_pooling_layer=False)
         self.lm_head = LMHead(config)
 
         # self.init_weights()
@@ -966,7 +966,7 @@ class CancerClassificationModel(BasePreTrainedModel):
 
         loss = None
         if labels is not None:
-            loss = self.loss_fct(logits.view(-1, self.num_labels), labels.view(-1, self.num_labels))
+            loss = self.loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
 
         return SequenceClassifierOutput(
             loss=loss,
@@ -974,3 +974,4 @@ class CancerClassificationModel(BasePreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
