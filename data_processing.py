@@ -15,6 +15,11 @@ class Tokenizer(PreTrainedTokenizer):
         except Exception as e:
             print(f"Error with loading tokenizer config: {e}")
 
+        self.config = self.tokenizer_config
+        self.vocab = self.tokenizer_config.get("model", {}).get("vocab", {})
+        self.merges = [tuple(merge.split(" ")) for merge in self.tokenizer_config.get("model", {}).get("merges", [])]
+        self.added_tokens = self.tokenizer_config.get("added_tokens", [])
+
         special_tokens_map = {token["content"]: token["id"] for token in self.tokenizer_config.get("added_tokens", []) if token.get("special")}
 
         special_tokens = {
@@ -22,6 +27,7 @@ class Tokenizer(PreTrainedTokenizer):
             "cls_token": "[CLS]",
             "sep_token": "[SEP]",
             "pad_token": "[PAD]",
+            "mask_token": "[MASK]",
         }
 
         for token_content, token_id in special_tokens_map.items():
@@ -33,12 +39,10 @@ class Tokenizer(PreTrainedTokenizer):
                 special_tokens["sep_token"] = token_content
             elif token_content == "[PAD]":
                 special_tokens["pad_token"] = token_content
+            elif token_content == "[MASK]":
+                special_tokens["mask_token"] = token_content
 
 
-        self.config = self.tokenizer_config
-        self.vocab = self.tokenizer_config.get("model", {}).get("vocab", {})
-        self.merges = [tuple(merge.split(" ")) for merge in self.tokenizer_config.get("model", {}).get("merges", [])]
-        self.added_tokens = self.tokenizer_config.get("added_tokens", [])
 
         super().__init__(**special_tokens, **kwargs)
 
@@ -50,6 +54,7 @@ class Tokenizer(PreTrainedTokenizer):
         self.cls_token_id = self.vocab.get(self.cls_token, self.cls_token_id)
         self.sep_token_id = self.vocab.get(self.sep_token, self.sep_token_id)
         self.pad_token_id = self.vocab.get(self.pad_token, self.pad_token_id)
+        self.mask_token_id = self.vocab.get(self.mask_token, self.mask_token_id)
 
         self.methylation_vocab = self._generate_default_methylation_vocab()
         # try:
