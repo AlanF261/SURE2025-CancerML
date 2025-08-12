@@ -863,7 +863,7 @@ class MaskedLM(BasePreTrainedModel):
             encoder_hidden_states: Optional[torch.FloatTensor] = None,
             encoder_attention_mask: Optional[torch.Tensor] = None,
             labels: Optional[torch.LongTensor] = None,
-            output_attentions: Optional[bool] = None,
+            output_attentions: Optional[bool] = None,  # hi
             output_hidden_states: Optional[bool] = None,
             return_dict: Optional[bool] = None,
             methylation_ids: Optional[torch.Tensor] = None,
