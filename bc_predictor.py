@@ -142,7 +142,7 @@ class Embeddings(nn.Module):
             methylation_ids=None,
             age_ids=None,
             inputs_embeds=None,
-            # past_key_values_length=0,
+            past_key_values_length=0,
     ):
 
         if inputs_embeds is None:
@@ -229,7 +229,7 @@ class AttentionCalculation(nn.Module):
             self,
             hidden_states: torch.Tensor,
             attention_mask: Optional[torch.FloatTensor] = None,
-            # head_mask: Optional[torch.FloatTensor] = None,
+            head_mask: Optional[torch.FloatTensor] = None,
             encoder_hidden_states: Optional[torch.FloatTensor] = None,
             encoder_attention_mask: Optional[torch.FloatTensor] = None,
             past_key_value: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
@@ -342,21 +342,21 @@ class AttentionMain(nn.Module):
             self,
             hidden_states,
             attention_mask=None,
-            # head_mask=None,
+            head_mask=None,
             encoder_hidden_states=None,
             encoder_attention_mask=None,
             past_key_value=None,
-            # output_attentions=False,
+            output_attentions=False,
     ):
         hidden_states_ln = self.LayerNorm(hidden_states)
         self_outputs = self.self(
             hidden_states_ln,
             attention_mask,
-            # head_mask,
+            head_mask,
             encoder_hidden_states,
             encoder_attention_mask,
             past_key_value,
-            # output_attentions,
+            output_attentions,
         )
         attention_output = self.output(self_outputs[0], hidden_states)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
@@ -421,11 +421,11 @@ class Layer(nn.Module):
             self,
             hidden_states,
             attention_mask=None,
-            # head_mask=None,
+            head_mask=None,
             encoder_hidden_states=None,
             encoder_attention_mask=None,
             past_key_value=None,
-            # output_attentions=False,
+            output_attentions=False,
     ):
         # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
         self_attn_past_key_value = (
@@ -476,12 +476,12 @@ class Encoder(nn.Module):
             self,
             hidden_states,
             attention_mask=None,
-            # head_mask=None,
+            head_mask=None,
             encoder_hidden_states=None,
             encoder_attention_mask=None,
             past_key_values=None,
             use_cache=None,
-            # output_attentions=False,
+            output_attentions=False,
             output_hidden_states=False,
             return_dict=True,
     ):
@@ -531,7 +531,7 @@ class Encoder(nn.Module):
                     encoder_hidden_states,
                     encoder_attention_mask,
                     past_key_value,
-                    # output_attentions,
+                    output_attentions,
                 )
 
             hidden_states = layer_outputs[0]
