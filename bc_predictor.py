@@ -429,7 +429,8 @@ class Layer(nn.Module):
     ):
         # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
         self_attn_past_key_value = (
-            past_key_value[:2] if past_key_value is not None else None
+            past_key_value if past_key_value is not None else None
+            # past_key_value[:2] if past_key_value is not None else None
         )
         self_attention_outputs = self.attention(
             hidden_states=hidden_states,
