@@ -9,8 +9,8 @@ from bc_predictor import MaskedLM
 from data_processing import Tokenizer
 from dataset import LineByLineTextDataset
 
-config_path = "/home/alanf/scratch/breastCancerDataset/scripts/config.py"
-tokenizer_config_path = "/home/alanf/scratch/breastCancerDataset/scripts/tokenizer_config.json"
+config_path = "/home/alanf/scratch/breastCancerDataset/SURE2025-CancerML/config.py"
+tokenizer_config_path = "/home/alanf/scratch/breastCancerDataset/SURE2025-CancerML/tokenizer_config.json"
 
 model_config = Config()
 
