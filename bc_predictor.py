@@ -432,13 +432,13 @@ class Layer(nn.Module):
             past_key_value[:2] if past_key_value is not None else None
         )
         self_attention_outputs = self.attention(
-            hidden_states,
-            attention_mask,
-            encoder_hidden_states,
-            encoder_attention_mask,
-            # head_mask,
-            # output_attentions=output_attentions,
+            hidden_states=hidden_states,
+            attention_mask=attention_mask,
+            head_mask=head_mask,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
             past_key_value=self_attn_past_key_value,
+            output_attentions=output_attentions,
         )
         attention_output = self_attention_outputs[0]
         outputs = self_attention_outputs[1:]
