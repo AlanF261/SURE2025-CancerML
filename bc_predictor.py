@@ -233,6 +233,7 @@ class AttentionCalculation(nn.Module):
             encoder_hidden_states: Optional[torch.FloatTensor] = None,
             encoder_attention_mask: Optional[torch.FloatTensor] = None,
             past_key_value: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+            output_attentions: Optional[bool] = False,
     ):  # -> Tuple[torch.Tensor]
         mixed_query_layer = self.query(hidden_states)
 
