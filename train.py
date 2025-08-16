@@ -1,4 +1,4 @@
-import torch
+# import torch
 # import os
 from transformers import TrainingArguments, Trainer, DataCollatorForLanguageModeling
 # from transformers import TrainingArguments, Trainer, default_data_collator, DataCollatorForLanguageModeling
@@ -9,8 +9,8 @@ from bc_predictor import MaskedLM
 from data_processing import Tokenizer
 from dataset import LineByLineTextDataset
 
-config_path = "./config.py"
-tokenizer_config_path = "./tokenizer_config.json"
+config_path = "/home/alanf/scratch/breastCancerDataset/scripts/config.py"
+tokenizer_config_path = "/home/alanf/scratch/breastCancerDataset/scripts/tokenizer_config.json"
 
 model_config = Config()
 
@@ -30,16 +30,16 @@ train_dataset = LineByLineTextDataset(
 )
 
 
-def create_scheduler(optimizer, num_warmup_steps, num_train_steps, lr_start, lr_end_decay=1e-5):
-    def lr_lambda(current_step: int):
-        if current_step < num_warmup_steps:
-            return float(current_step) / float(max(1, num_warmup_steps))
-
-        progress_after_warmup = (current_step - num_warmup_steps) / (num_train_steps - num_warmup_steps)
-        decay_factor = max(0.0, 1.0 - progress_after_warmup)**0.5
-        return max(lr_end_decay / lr_start, decay_factor)
-
-    return torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
+# def create_scheduler(optimizer, num_warmup_steps, num_train_steps, lr_start, lr_end_decay=1e-5):
+#     def lr_lambda(current_step: int):
+#         if current_step < num_warmup_steps:
+#             return float(current_step) / float(max(1, num_warmup_steps))
+#
+#         progress_after_warmup = (current_step - num_warmup_steps) / (num_train_steps - num_warmup_steps)
+#         decay_factor = max(0.0, 1.0 - progress_after_warmup)**0.5
+#         return max(lr_end_decay / lr_start, decay_factor)
+#
+#     return torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
 
 
 training_args = TrainingArguments(
