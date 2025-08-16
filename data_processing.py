@@ -15,7 +15,7 @@ class Tokenizer(PreTrainedTokenizer):
         except Exception as e:
             print(f"Error with loading tokenizer config: {e}")
 
-        self.config = self.tokenizer_config
+        self.tokenizer_config = self.tokenizer_config
         self.vocab = self.tokenizer_config.get("model", {}).get("vocab", {})
         self.merges = [tuple(merge.split(" ")) for merge in self.tokenizer_config.get("model", {}).get("merges", [])]
         self.added_tokens = self.tokenizer_config.get("added_tokens", [])
