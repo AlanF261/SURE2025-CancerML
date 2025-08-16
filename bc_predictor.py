@@ -480,7 +480,7 @@ class Encoder(nn.Module):
             encoder_hidden_states=None,
             encoder_attention_mask=None,
             past_key_values=None,
-            use_cache=None,
+            use_cache=False,
             output_attentions=False,
             output_hidden_states=False,
             return_dict=True,
@@ -522,6 +522,7 @@ class Encoder(nn.Module):
                     # layer_head_mask,
                     encoder_hidden_states,
                     encoder_attention_mask,
+                    past_key_value,
                 )
             else:
                 layer_outputs = layer_module(
