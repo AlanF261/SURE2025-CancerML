@@ -294,6 +294,9 @@ class Tokenizer(PreTrainedTokenizer):
     def get_vocab_size(self) -> int:
         return len(self.vocab)
 
+    def set_vocab_size(self, size):
+        self.vocab_size = size
+
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
         output_file_path = os.path.join(save_directory, f"{filename_prefix or ''}vocab.json")
         with open(output_file_path, "w", encoding="utf-8") as f:
