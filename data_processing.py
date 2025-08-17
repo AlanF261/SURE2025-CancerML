@@ -18,7 +18,7 @@ class Tokenizer(PreTrainedTokenizer):
         self.vocab = self.tokenizer_config.get("model", {}).get("vocab", {})
         self.merges = [tuple(merge.split(" ")) for merge in self.tokenizer_config.get("model", {}).get("merges", [])]
         self.added_tokens = self.tokenizer_config.get("added_tokens", [])
-        self.vocab_size = 4095
+        vocab_size = len(self.vocab)
         special_tokens_map = {token["content"]: token["id"] for token in self.tokenizer_config.get("added_tokens", []) if token.get("special")}
 
         special_tokens = {
@@ -294,8 +294,8 @@ class Tokenizer(PreTrainedTokenizer):
     def get_vocab_size(self) -> int:
         return len(self.vocab)
 
-    def set_vocab_size(self, size):
-        self.vocab_size = size
+    # def set_vocab_size(self, size):
+    #     self.vocab_size = size
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
         output_file_path = os.path.join(save_directory, f"{filename_prefix or ''}vocab.json")
