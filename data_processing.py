@@ -306,6 +306,10 @@ class Tokenizer(PreTrainedTokenizer):
     def get_vocab(self) -> dict[str, int]:
         return self.vocab
 
+    @property
+    def vocab_size(self):
+        return len(self.vocab)
+
 
 def get_pairs(tokens):
     pairs = set()
