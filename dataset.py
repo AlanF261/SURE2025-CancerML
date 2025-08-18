@@ -5,6 +5,7 @@ from collections.abc import Mapping
 
 from data_processing import Tokenizer
 
+
 class BCClassificationDataset(Dataset):
     def __init__(self, tokenizer: Tokenizer, filepath_class0: str, filepath_class1: str, block_size: int):
         self.tokenizer = tokenizer
