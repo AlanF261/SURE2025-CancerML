@@ -110,6 +110,41 @@ def main():
     # Start training
     trainer.train()
 
+    validation_files = []
+    validation_filepaths_file = "/home/alanf/scratch/breastCancerDataset/scripts/cohorts/validation_cohort_filepaths.txt"
+
+    try:
+        with open(validation_filepaths_file, "r") as f:
+            for line in f:
+                filepath = line.strip()
+                if filepath:
+                    validation_files.append(filepath)
+    except FileNotFoundError:
+        print(f"Error: The file {validation_filepaths_file} was not found.")
+
+    print("Starting per-file validation evaluation...")
+
+    for file_path in validation_files:
+        print(f"\nEvaluating file: {file_path}")
+
+        # Create a new dataset containing only the current file
+        single_file_dataset = BCClassificationDataset(
+            tokenizer=tokenizer,
+            file_path=file_path,
+            block_size=12000,
+            model_name_or_path=model_name_or_path
+        )
+
+        metrics = trainer.evaluate(eval_dataset=single_file_dataset)
+
+        accuracy = metrics.get('eval_accuracy')
+        if accuracy is not None:
+            print(f"Accuracy for {file_path}: {accuracy:.4f}")
+        else:
+            print("Accuracy metric not found. Check your `compute_metrics` function.")
+
+    print("\nPer-file validation complete.")
+
     # --- Post-training step: Generate predictions for ROC curve ---
     print("Training complete. Generating predictions for ROC curve...")
     predictions_output = trainer.predict(eval_dataset)
