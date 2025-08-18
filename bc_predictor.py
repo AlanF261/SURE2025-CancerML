@@ -930,21 +930,76 @@ class MaskedLM(BasePreTrainedModel):
             attentions=outputs.attentions,
         )
 
-class CancerClassificationModel(BasePreTrainedModel):
+# class CancerClassificationModel(BasePreTrainedModel):
+#     def __init__(self, config):
+#         super().__init__(config)
+#         self.num_labels = config.num_labels
+#         self.model = HierarchicalGenomeTransformer(config)
+#         self.classifier = nn.Sequential(
+#             nn.Dropout(config.hidden_dropout_prob),
+#             nn.Linear(config.hidden_size, config.num_labels)
+#         )
+#         # self.loss_fct = BCEWithLogitsLoss()
+#         self.loss_fct = CrossEntropyLoss()
+#
+#     def forward(
+#             self,
+#             input_ids: Optional[torch.LongTensor] = None,
+#             attention_mask: Optional[torch.Tensor] = None,
+#             inputs_embeds: Optional[torch.FloatTensor] = None,
+#             encoder_hidden_states: Optional[torch.FloatTensor] = None,
+#             encoder_attention_mask: Optional[torch.Tensor] = None,
+#             labels: Optional[torch.LongTensor] = None,
+#             output_hidden_states: Optional[bool] = None,
+#             return_dict: Optional[bool] = None,
+#             methylation_ids: Optional[torch.Tensor] = None,
+#             age_ids: Optional[torch.Tensor] = None,
+#     ):
+#         return_dict = (
+#             return_dict if return_dict is not None else self.config.use_return_dict
+#         )
+#
+#         outputs = self.model(
+#             input_ids,
+#             attention_mask=attention_mask,
+#             inputs_embeds=inputs_embeds,
+#             encoder_hidden_states=encoder_hidden_states,
+#             encoder_attention_mask=encoder_attention_mask,
+#             output_hidden_states=output_hidden_states,
+#             return_dict=return_dict,
+#             methylation_ids=methylation_ids,
+#             age_ids=age_ids,
+#         )
+#         sequence_output = outputs.pooler_output
+#
+#         logits = self.classifier(sequence_output)
+#
+#         loss = None
+#         if labels is not None:
+#             loss = self.loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+#
+#         return SequenceClassifierOutput(
+#             loss=loss,
+#             logits=logits,
+#             hidden_states=outputs.hidden_states,
+#             attentions=outputs.attentions,
+#         )
+
+class CancerClassificationModel(PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
-        self.model = HierarchicalGenomeTransformer(config)
+        self.model = MaskedLM(config)
         self.classifier = nn.Sequential(
             nn.Dropout(config.hidden_dropout_prob),
             nn.Linear(config.hidden_size, config.num_labels)
         )
-        # self.loss_fct = BCEWithLogitsLoss()
         self.loss_fct = CrossEntropyLoss()
+        self.post_init()
 
     def forward(
             self,
-            input_ids: Optional[torch.LongTensor] = None,
+            input_ids: Optional[torch.Tensor] = None,
             attention_mask: Optional[torch.Tensor] = None,
             inputs_embeds: Optional[torch.FloatTensor] = None,
             encoder_hidden_states: Optional[torch.FloatTensor] = None,
@@ -970,9 +1025,10 @@ class CancerClassificationModel(BasePreTrainedModel):
             methylation_ids=methylation_ids,
             age_ids=age_ids,
         )
-        sequence_output = outputs.pooler_output
+        sequence_output = outputs.hidden_states[-1]
+        pooled_output = sequence_output[:, 0, :] # Grab the CLS token output
 
-        logits = self.classifier(sequence_output)
+        logits = self.classifier(pooled_output)
 
         loss = None
         if labels is not None:

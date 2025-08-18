@@ -245,7 +245,7 @@ class Tokenizer(PreTrainedTokenizer):
 
         return [age_id_value] * sequence_length
 
-    def process_bam(self, bam_file_path, age: Optional[int] = None):
+    def _process_bam(self, bam_file_path, age: Optional[int] = None):
 
         sequence, methylation_seq = self.extract_methylated_sequence(bam_file_path)
 

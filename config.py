@@ -40,6 +40,7 @@ class Config(PretrainedConfig):
             age_pad_id=0,
             max_age_embeddings=120,
             mask_ratio_train=0.12,
+            num_labels=2,
             **kwargs,
     ):
         super().__init__(
@@ -71,3 +72,4 @@ class Config(PretrainedConfig):
         self.max_age_embeddings = max_age_embeddings
         self.age_pad_id = age_pad_id
         self.mask_ratio_train = mask_ratio_train
+        self.num_labels = num_labels
