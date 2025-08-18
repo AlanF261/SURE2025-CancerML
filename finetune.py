@@ -11,36 +11,28 @@ from bc_predictor import CancerClassificationModel
 from data_processing import Tokenizer
 from dataset import BCClassificationDataset
 
-# The path to your pre-trained model directory
 MODEL_PATH = "/home/alanf/scratch/breastCancerDataset/SURE2025-CancerML/dummy_model"
-# Paths to your finetuning data files
 TRAIN_CANCER_FILE = "/home/alanf/scratch/breastCancerDataset/scripts/cohorts/breast_cancer_discovery_runs.txt"
 TRAIN_HEALTHY_FILE = "/home/alanf/scratch/breastCancerDataset/scripts/cohorts/healthy_discovery_runs.txt"
 EVAL_CANCER_FILE = "/home/alanf/scratch/breastCancerDataset/scripts/cohorts/breast_cancer_discovery_runs.txt"
 EVAL_HEALTHY_FILE = "/home/alanf/scratch/breastCancerDataset/scripts/cohorts/healthy_discovery_runs.txt"
 
 def compute_metrics(eval_pred):
-    """Computes accuracy and AUC for the evaluation set."""
     logits, labels = eval_pred
     predictions = np.argmax(logits, axis=-1)
 
-    # Calculate accuracy
     accuracy = accuracy_score(labels, predictions)
 
-    # Calculate AUC if there are at least two unique labels
     if len(np.unique(labels)) > 1:
-        roc_auc = roc_auc_score(labels, logits[:, 1]) # ROC-AUC for class 1
+        roc_auc = roc_auc_score(labels, logits[:, 1])
         return {"accuracy": accuracy, "roc_auc": roc_auc}
     else:
         return {"accuracy": accuracy}
 
 def plot_roc_curve(logits, labels):
-    """Plots the ROC curve from predictions and labels."""
-    # Compute ROC curve and AUC
     fpr, tpr, thresholds = roc_curve(labels, logits[:, 1])
     roc_auc = auc(fpr, tpr)
 
-    # Plot ROC curve
     plt.figure()
     plt.plot(fpr, tpr, color='darkorange', lw=2, label=f'ROC curve (area = {roc_auc:.2f})')
     plt.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--')
@@ -53,21 +45,16 @@ def plot_roc_curve(logits, labels):
     plt.show()
 
 def main():
-    # Load model configuration and tokenizer
-    # We need to set num_labels for the classification head
     config = Config.from_pretrained(os.path.join(MODEL_PATH, "config.json"), num_labels=2)
     tokenizer = Tokenizer(os.path.join(MODEL_PATH, "tokenizer_config.json"))
 
-    # Load the pre-trained model and initialize the classification head
     model = CancerClassificationModel.from_pretrained(MODEL_PATH, config=config)
 
-    # Prepare datasets for fine-tuning
-    # Use the new BCClassificationDataset
     train_dataset = BCClassificationDataset(
         tokenizer=tokenizer,
         filepath_class0=TRAIN_HEALTHY_FILE,
         filepath_class1=TRAIN_CANCER_FILE,
-        block_size=12000 # Same block size as the pre-training script
+        block_size=12000
     )
     eval_dataset = BCClassificationDataset(
         tokenizer=tokenizer,
@@ -76,16 +63,14 @@ def main():
         block_size=12000
     )
 
-    # Use a DataCollatorWithPadding for classification
     data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
 
-    # Define Training Arguments
     training_args = TrainingArguments(
-        output_dir="/home/alanf/scratch/breastCancerDataset/finetune_outputs/finetuned_model_checkpoints",  # Where checkpoints will be saved
+        output_dir="/home/alanf/scratch/breastCancerDataset/finetune_outputs/finetuned_model_checkpoints",
         overwrite_output_dir=True,
-        eval_strategy="epoch",  # Evaluate at the end of each epoch
-        save_strategy="epoch",  # Save checkpoint at the end of each epoch
-        load_best_model_at_end=True, # Load the best model at the end of training
+        eval_strategy="epoch",
+        save_strategy="epoch",
+        load_best_model_at_end=True,
         per_device_train_batch_size=8,
         per_device_eval_batch_size=8,
         num_train_epochs=3,
@@ -95,7 +80,6 @@ def main():
         report_to="none",
     )
 
-    # Initialize the Trainer
     trainer = Trainer(
         model=model,
         args=training_args,
@@ -106,22 +90,16 @@ def main():
         tokenizer=tokenizer,
     )
 
-    # Start training
     trainer.train()
 
-    # --- Post-training step: Generate predictions for ROC curve ---
-    print("Training complete. Generating predictions for ROC curve...")
     predictions_output = trainer.predict(eval_dataset)
     logits = predictions_output.predictions
     labels = predictions_output.label_ids
 
-    # Save the predictions and labels
     np.save("finetune_predictions.npy", logits)
     np.save("finetune_labels.npy", labels)
 
-    print("Predictions and labels saved to finetune_predictions.npy and finetune_labels.npy.")
 
-    # Plot the ROC curve
     plot_roc_curve(logits, labels)
 
 if __name__ == "__main__":

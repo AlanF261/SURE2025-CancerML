@@ -1,7 +1,4 @@
-# import torch
-# import os
 from transformers import TrainingArguments, Trainer, DataCollatorForLanguageModeling
-# from transformers import TrainingArguments, Trainer, default_data_collator, DataCollatorForLanguageModeling
 
 
 from config import Config
@@ -11,6 +8,7 @@ from dataset import LineByLineTextDataset
 
 config_path = "/home/alanf/scratch/breastCancerDataset/SURE2025-CancerML/config.py"
 tokenizer_config_path = "/home/alanf/scratch/breastCancerDataset/SURE2025-CancerML/tokenizer_config.json"
+input_filepath = "/home/alanf/scratch/breastCancerDataset/scripts/cohorts/discovery_filepaths.txt"
 
 model_config = Config()
 
@@ -18,29 +16,11 @@ tokenizer = Tokenizer(tokenizer_config_path)
 
 model = MaskedLM(model_config)
 
-# if hasattr(model,'lm_head') and hasattr(model.lm_head,'decoder') and hasattr(model.ntv2.embeddings,'word_embeddings'):
-#     model.lm_head.decoder.weight = model.ntv2.embeddings.word_embeddings.weight
-
-input_filepath = ("/home/alanf/scratch/breastCancerDataset/scripts/cohorts/encode_one.txt")
-
 train_dataset = LineByLineTextDataset(
     tokenizer=tokenizer,
     filepath=input_filepath,
     block_size=12000
 )
-
-
-# def create_scheduler(optimizer, num_warmup_steps, num_train_steps, lr_start, lr_end_decay=1e-5):
-#     def lr_lambda(current_step: int):
-#         if current_step < num_warmup_steps:
-#             return float(current_step) / float(max(1, num_warmup_steps))
-#
-#         progress_after_warmup = (current_step - num_warmup_steps) / (num_train_steps - num_warmup_steps)
-#         decay_factor = max(0.0, 1.0 - progress_after_warmup)**0.5
-#         return max(lr_end_decay / lr_start, decay_factor)
-#
-#     return torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
-
 
 training_args = TrainingArguments(
     output_dir="/home/alanf/scratch/breastCancerDataset/scripts/pretrainresults",
@@ -63,15 +43,6 @@ warmup_steps = int(num_training_steps * 0.1)
 
 training_args.warmup_steps = warmup_steps
 
-# def custom_scheduler(optimizer, num_training_steps):
-#     return create_scheduler(
-#         optimizer,
-#         num_warmup_steps=training_args.warmup_steps, # Use the updated warmup_steps
-#         num_train_steps=num_training_steps,
-#         lr_start=training_args.learning_rate,
-#         lr_end_decay=1e-8
-#     )
-
 data_collator = DataCollatorForLanguageModeling(
     tokenizer=tokenizer,
     mlm=True,
@@ -86,10 +57,7 @@ trainer = Trainer(
     tokenizer=tokenizer,
 )
 
-print("Starting training.")
 trainer.train()
-print("Finished training.")
 
 trainer.save_model("/home/alanf/scratch/breastCancerDataset/scripts/dummy_model")
-# trainer.save_pretrained("/home/alanf/scratch/breastCancerDataset/scripts/dummy_model")
 print("Success??")

@@ -1,4 +1,4 @@
-# Code adapted from newer MethylBERT
+# Code adapted from MethylBERT
 
 import pysam
 import json
@@ -13,7 +13,7 @@ class Tokenizer(PreTrainedTokenizer):
             with open(tokenizer_config_path, 'r', encoding='utf-8') as f:
                 self.tokenizer_config = json.load(f)
         except Exception as e:
-            print(f"Error with loading tokenizer config: {e}")
+            pass
 
         self.vocab = self.tokenizer_config.get("model", {}).get("vocab", {})
         self.merges = [tuple(merge.split(" ")) for merge in self.tokenizer_config.get("model", {}).get("merges", [])]
@@ -45,7 +45,7 @@ class Tokenizer(PreTrainedTokenizer):
 
         super().__init__(**special_tokens, **kwargs)
 
-        self.meth_pad_id = 0  # hard coded for now, fix later
+        self.meth_pad_id = 0
         self.max_age_embeddings = self.tokenizer_config.get("max_age_embeddings", 100)
         self.age_unk_id = self.tokenizer_config.get("age_unk_id", 0)
 
@@ -56,35 +56,7 @@ class Tokenizer(PreTrainedTokenizer):
         self.mask_token_id = self.vocab.get(self.mask_token, self.mask_token_id)
 
         self.methylation_vocab = self._generate_default_methylation_vocab()
-        # try:
-        #     with open(tokenizer_config_path, 'r', encoding='utf-8') as f:
-        #         self.tokenizer_config = json.load(f)
-        # except Exception as e:
-        #     print(f"Error with loading tokenizer config: {e}")
-        #
-        # self.config = self.tokenizer_config
-        # self.vocab = self.tokenizer_config.get("model", {}).get("vocab", {})
-        # self.merges = [tuple(merge.split(" ")) for merge in self.tokenizer_config.get("model", {}).get("merges", {})]
-        # self.added_tokens = self.tokenizer_config.get("added_tokens", [])
-        # # self.special_tokens_map = {token["content"]: token["id"] for token in self.added_tokens if token.get("special")}
-        #
-        # self.unk_token = "[UNK]"
-        # self.unk_token_id = self.special_tokens_map.get(self.unk_token, 0)
-        # self.cls_token = "[CLS]"
-        # self.cls_token_id = self.special_tokens_map.get(self.cls_token, 1)
-        # self.sep_token = "[SEP]"
-        # self.sep_token_id = self.special_tokens_map.get(self.sep_token, 2)
-        # self.pad_token = "[PAD]"
-        # self.pad_token_id = self.special_tokens_map.get(self.pad_token, 3)
-        # self.meth_pad_id = 0  # hard coded for now, fix later
-        #
-        # # self.single_template = self.tokenizer_config.get("post_processor", {}).get("single", [])
-        # # self.pair_template = self.tokenizer_config.get("post_processor", {}).get("pair", [])
-        #
-        # self.max_age_embeddings = self.tokenizer_config.get("max_age_embeddings", 100)
-        # self.age_unk_id = self.tokenizer_config.get("age_unk_id", 0)
-        #
-        # self.methylation_vocab = self._generate_default_methylation_vocab()
+
 
     def _generate_default_methylation_vocab(self, max_len=16):
         self.methylation_vocab = {}
@@ -105,23 +77,18 @@ class Tokenizer(PreTrainedTokenizer):
 
                 if add_0 not in self.methylation_vocab.values():
                     self.methylation_vocab[add_0] = current_id
-                    # self.methylation_vocab[current_id] = add_0
                     current_id += 1
-                    # current_id += 1
                 vocab_additions.append(add_0)
 
                 if add_1 not in self.methylation_vocab.values():
                     self.methylation_vocab[add_1] = current_id
-                    # self.methylation_vocab[current_id] = add_1
                     current_id += 1
-                    # current_id += 1
                 vocab_additions.append(add_1)
 
             current_combinations = [combo for combo in vocab_additions if len(combo) <= max_len]
         return self.methylation_vocab
 
     def extract_methylated_sequence(self, bam_file_path):
-        # Z, X, H, U for methylated; z, x, h, u for unmethylated
         dna_sequences = []
         methylation_tags = []
 
@@ -132,12 +99,10 @@ class Tokenizer(PreTrainedTokenizer):
                         dna_sequences.append(read.query_sequence)
                         methylation_tags.append(read.get_tag('XM'))
         except Exception as e:
-            print(f"Error processing BAM file: {e}")
+            pass
 
-        print(f"Number of sequences extracted: {len(dna_sequences)}")
-        print(f"Number of methylation tags extracted: {len(methylation_tags)}")
         return dna_sequences, methylation_tags
-        # return "".join(dna_sequences), "".join(methylation_tags)
+
 
     def convert_meth(self, meth_seq: List):
         methyl_seq = list()
@@ -146,54 +111,12 @@ class Tokenizer(PreTrainedTokenizer):
             token = char
             if token in ['Z', 'X', 'H', 'U']:
                 m = 1
-            # elif token in ['z', 'x', 'h', 'u']: #fix for cpg representation
-            #     m = 0
-            else:  # Implementing full bit approach because it contains positional information, and
-                # shouldn't have significant impacts on efficiency
+            else:
                 m = 0
 
-            # six alphabets indicating cytosine methylation in bismark processed files
-            # token = re.sub("[h|H|z|Z|x|X]", "C", token)
-            # converted_seq.append(token)
             methyl_seq.append(str(m))
 
         return methyl_seq
-
-    # def bpe_merge(self, tokens: list, methyl_seq: list):
-    #
-    #     tokens_copy = list(tokens)
-    #     methyl_copy = list(methyl_seq)
-    #
-    #     while True:
-    #         best_merge = None
-    #
-    #         for merge_idx, (p1, p2) in enumerate(self.merges):
-    #             for i in range(len(tokens_copy) - 1):
-    #                 if tokens_copy[i] == p1 and tokens_copy[i+1] == p2:
-    #                     if best_merge is None or merge_idx < best_merge[0]:
-    #                         best_merge = (merge_idx, i)
-    #
-    #         if best_merge is None:
-    #             break
-    #
-    #         _, i = best_merge
-    #
-    #         merged_token = "".join(tokens_copy[i:i+2])
-    #         tokens_copy[i:i+2] = [merged_token]
-    #
-    #         merged_methyl = "".join(methyl_copy[i:i+2])
-    #         methyl_copy[i:i+2] = [merged_methyl]
-    #
-    #     final_tokens = []
-    #     final_methyl = []
-    #     for i, token in enumerate(tokens_copy):
-    #         if token not in self.vocab:
-    #             final_tokens.append(self.unk_token)
-    #         else:
-    #             final_tokens.append(token)
-    #         final_methyl.append(methyl_copy[i])
-    #
-    #     return final_tokens, final_methyl
 
     def bpe_merge(self, tokens: list, methyl_seq: list):
         if not tokens:
@@ -202,15 +125,15 @@ class Tokenizer(PreTrainedTokenizer):
         tokens_copy = list(tokens)
         methyl_copy = list(methyl_seq)
 
-        for merge in self.merges:  # Process merges in order
+        for merge in self.merges:
             new_tokens = []
             new_methyl = []
             i = 0
 
             while i < len(tokens_copy):
                 if (i < len(tokens_copy) - 1 and
-                    tokens_copy[i] == merge[0] and
-                    tokens_copy[i + 1] == merge[1]):
+                        tokens_copy[i] == merge[0] and
+                        tokens_copy[i + 1] == merge[1]):
 
                     new_tokens.append(merge[0] + merge[1])
                     new_methyl.append(methyl_copy[i] + methyl_copy[i + 1])
@@ -259,11 +182,6 @@ class Tokenizer(PreTrainedTokenizer):
 
         age_ids = self._get_age_id(age, len(input_ids))
 
-        print(f"Tokenized output for {bam_file_path}:")
-        print(f"  input_ids length: {len(input_ids)}")
-        print(f"  methylation_ids length: {len(methylation_ids)}")
-        print(f"  age_ids length: {len(age_ids)}")
-
         return {
             "input_ids": input_ids,
             "methylation_ids": methylation_ids,
@@ -280,7 +198,7 @@ class Tokenizer(PreTrainedTokenizer):
             raise ValueError("A 'bam_file_path' must be provided.")
 
         age = kwargs.pop("age", None)
-        return self.process_bam(bam_file_path, age)
+        return self._process_bam(bam_file_path, age)
 
     def _tokenize(self, text: str, **kwargs) -> List[str]:
         return list(text)
@@ -293,9 +211,6 @@ class Tokenizer(PreTrainedTokenizer):
 
     def get_vocab_size(self) -> int:
         return len(self.vocab)
-
-    # def set_vocab_size(self, size):
-    #     self.vocab_size = size
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
         output_file_path = os.path.join(save_directory, f"{filename_prefix or ''}vocab.json")
@@ -318,4 +233,3 @@ def get_pairs(tokens):
         pairs.add((prev_token, token))
         prev_token = token
     return pairs
-

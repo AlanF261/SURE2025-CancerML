@@ -1,25 +1,16 @@
-# Code primarily copied from Nucleotide Transformer v2 with modifications.
-
+# Code primarily copied from Nucleotide Transformer v2 with modifications
 import math
 from typing import Optional, Tuple, Union
-# removed List
 
 import torch
 import torch.utils.checkpoint
 from torch import nn
-# from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss, SiLU
 from torch.nn import CrossEntropyLoss, SiLU
 import torch.nn.functional as nnfunc
-# from transformers.file_utils import (
-#     add_code_sample_docstrings,
-#     add_start_docstrings,
-#     add_start_docstrings_to_model_forward)
 from transformers.modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     BaseModelOutputWithPoolingAndCrossAttentions,
     MaskedLMOutput, SequenceClassifierOutput,
-    # SequenceClassifierOutput,
-    # TokenClassifierOutput,
 )
 from transformers.modeling_utils import (
     PreTrainedModel,
@@ -27,7 +18,6 @@ from transformers.modeling_utils import (
     prune_linear_layer,
 )
 from transformers.utils import logging
-# modify later
 from config import Config
 
 logger = logging.get_logger(__name__)
@@ -46,14 +36,10 @@ def apply_rotary_pos_emb(x, cos, sin):
 
 
 def gelu(x):
-    """
-    This is the gelu implementation from the original ESM repo. Using F.gelu yields subtly wrong results.
-    """
     return x * 0.5 * (1.0 + torch.erf(x / math.sqrt(2.0)))
 
 
 def symmetrize(x):
-    """Make layer symmetric in final two dimensions, used for contact prediction."""
     return x + x.transpose(-1, -2)
 
 
@@ -72,8 +58,6 @@ class RotaryEmbedding(torch.nn.Module):
     def _update_cos_sin_tables(self, x, seq_dimension=2):
         seq_len = x.shape[seq_dimension]
 
-        # Reset the tables if the sequence length has changed,
-        # or if we're on a new device (possibly due to tracing for instance)
         if seq_len != self._seq_len_cached or self._cos_cached.device != x.device:
             self._seq_len_cached = seq_len
             t = torch.arange(x.shape[seq_dimension], device=x.device).type_as(
@@ -117,12 +101,6 @@ class Embeddings(nn.Module):
             self.layer_norm = None
         self.dropout = nn.Dropout(self.config.hidden_dropout_prob)
 
-        # self.register_buffer(
-        #     "position_ids",
-        #     torch.arange(config.max_position_embeddings).expand((1, -1)),
-        #     persistent=False,
-        # )
-
         self.methylation_embeddings = nn.Embedding(
             self.config.max_methylation_embeddings,
             self.config.hidden_size,
@@ -130,7 +108,6 @@ class Embeddings(nn.Module):
         )
         self.age_embeddings = nn.Embedding(
             self.config.max_age_embeddings, self.config.hidden_size, padding_idx=self.config.age_pad_id
-            # adjust to have 45 0 0 0 instead of 45 repeating
         )
         self.token_dropout = config.token_dropout
         self.mask_token_id = config.mask_token_id
@@ -151,8 +128,6 @@ class Embeddings(nn.Module):
             embeddings = inputs_embeds
 
         if methylation_ids is not None:
-            # methyl_embeds = self.methylation_embeddings(methylation_ids)
-            # embeddings = embeddings + methyl_embeds
             methylation_embeddings = self.methylation_embeddings(methylation_ids)
             embeddings += methylation_embeddings
 
@@ -164,7 +139,6 @@ class Embeddings(nn.Module):
             embeddings.masked_fill_(
                 (input_ids == self.mask_token_id).unsqueeze(-1), 0.0
             )
-            # mask_ratio_train = (0.15 * 0.8)
             mask_ratio_train = self.config.mask_ratio_train
             src_lengths = attention_mask.sum(-1)
             mask_ratio_observed = (input_ids == self.mask_token_id).sum(
@@ -234,32 +208,11 @@ class AttentionCalculation(nn.Module):
             encoder_attention_mask: Optional[torch.FloatTensor] = None,
             past_key_value: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
             output_attentions: Optional[bool] = False,
-    ):  # -> Tuple[torch.Tensor]
+    ):
         mixed_query_layer = self.query(hidden_states)
 
-        # If this is instantiated as a cross-attention module, the keys
-        # and values come from an encoder; the attention mask needs to be
-        # such that the encoder's padding tokens are not attended to.
         is_cross_attention = encoder_hidden_states is not None
 
-        # if is_cross_attention and past_key_value is not None:
-        #     # reuse k,v, cross_attentions
-        #     # key_layer = past_key_value[0]
-        #     # value_layer = past_key_value[1]
-        #     key_layer = past_key_value
-        #     value_layer = past_key_value
-        #     attention_mask = encoder_attention_mask
-        # elif is_cross_attention:
-        #     key_layer = self.transpose_for_scores(self.key(encoder_hidden_states))
-        #     value_layer = self.transpose_for_scores(self.value(encoder_hidden_states))
-        #     attention_mask = encoder_attention_mask
-        # elif past_key_value is not None:
-        #     # This case is used for decoder-only self attention
-        #     key_layer = self.transpose_for_scores(self.key(hidden_states))
-        #     value_layer = self.transpose_for_scores(self.value(hidden_states))
-        #     key_layer = torch.cat([past_key_value[0], key_layer], dim=2)
-        #     value_layer = torch.cat([past_key_value[1], value_layer], dim=2)
-        # else:
         key_layer = self.transpose_for_scores(self.key(hidden_states))
         value_layer = self.transpose_for_scores(self.value(hidden_states))
 
@@ -278,22 +231,12 @@ class AttentionCalculation(nn.Module):
             dropout_p=self.dropout.p,
             is_causal=False
         )
-        # Replacing manual attention calculation with torch.nn.functional.scaled_dot_product_attention
-        # to potentially use flash attention if optimal, significantly improving performance
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
         context_layer = context_layer.view(new_context_layer_shape)
 
-        # if head_mask is not None:
-        #     context_layer_reshaped = context_layer.view(context_layer.size()[:-1] +
-        #     (self.num_attention_heads, self.attention_head_size)).permute(0, 2, 1, 3)
-        #     context_layer_reshaped = context_layer_reshaped * head_mask
-        #     context_layer = context_layer_reshaped.permute(0, 2, 1, 3).contiguous().view(new_context_layer_shape)
-
         outputs = context_layer
 
-        # if self.is_decoder:
-        #     outputs = outputs + (past_key_value,)
         return (outputs,)
 
 
@@ -328,13 +271,11 @@ class AttentionMain(nn.Module):
             self.pruned_heads,
         )
 
-        # Prune linear layers
         self.self.query = prune_linear_layer(self.self.query, index)
         self.self.key = prune_linear_layer(self.self.key, index)
         self.self.value = prune_linear_layer(self.self.value, index)
         self.output.dense = prune_linear_layer(self.output.dense, index, dim=1)
 
-        # Update hyper params and store pruned heads
         self.self.num_attention_heads = self.self.num_attention_heads - len(heads)
         self.self.all_head_size = (
                 self.self.attention_head_size * self.self.num_attention_heads
@@ -362,7 +303,7 @@ class AttentionMain(nn.Module):
             output_attentions,
         )
         attention_output = self.output(self_outputs[0], hidden_states)
-        outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
+        outputs = (attention_output,) + self_outputs[1:]
         return outputs
 
 
@@ -380,7 +321,6 @@ class FeedForwardGating(nn.Module):
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
 
-        # GLU
         x1, x2 = hidden_states.split(int(hidden_states.size(-1) / 2), -1)
         hidden_states = self.activation_fn(x1) * x2
 
@@ -430,10 +370,8 @@ class Layer(nn.Module):
             past_key_value=None,
             output_attentions=False,
     ):
-        # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
         self_attn_past_key_value = (
             past_key_value if past_key_value is not None else None
-            # past_key_value[:2] if past_key_value is not None else None
         )
         self_attention_outputs = self.attention(
             hidden_states=hidden_states,
@@ -446,15 +384,11 @@ class Layer(nn.Module):
         )
         attention_output = self_attention_outputs[0]
         outputs = self_attention_outputs[1:]
-        #     present_key_value = present_key_value + cross_attn_present_key_value
 
         layer_output = self.feed_forward_chunk(attention_output)
 
         outputs = (layer_output,) + outputs
 
-        # if decoder, return the attn key/values as the last output
-        # if self.is_decoder:
-        #     outputs = outputs + (present_key_value,)
         return outputs
 
     def feed_forward_chunk(self, attention_output):
@@ -497,25 +431,18 @@ class Encoder(nn.Module):
                 )
                 use_cache = False
         all_hidden_states = () if output_hidden_states else None
-        # all_self_attentions = () if output_attentions else None
-        # all_cross_attentions = (
-        #     () if output_attentions and self.config.add_cross_attention else None
-        # )
 
         next_decoder_cache = () if use_cache else None
         for i, layer_module in enumerate(self.layer):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            # layer_head_mask = head_mask[i] if head_mask is not None else None
-            # past_key_value = past_key_values[i] if past_key_values is not None else None
             past_key_value = None
 
             if self.gradient_checkpointing and self.training:
 
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
-                        # return module(*inputs, past_key_value, output_attentions)
                         return module(*inputs)
 
                     return custom_forward
@@ -524,7 +451,6 @@ class Encoder(nn.Module):
                     create_custom_forward(layer_module),
                     hidden_states,
                     attention_mask,
-                    # layer_head_mask,
                     encoder_hidden_states,
                     encoder_attention_mask,
                     past_key_value,
@@ -533,20 +459,15 @@ class Encoder(nn.Module):
                 layer_outputs = layer_module(
                     hidden_states,
                     attention_mask,
-                    # layer_head_mask,
-                    encoder_hidden_states,
-                    encoder_attention_mask,
-                    past_key_value,
-                    output_attentions,
+                    encoder_hidden_states=encoder_hidden_states,
+                    encoder_attention_mask=encoder_attention_mask,
+                    past_key_value=past_key_value,
+                    output_attentions=output_attentions,
                 )
 
             hidden_states = layer_outputs[0]
             if use_cache:
                 next_decoder_cache += (layer_outputs[-1],)
-            # if output_attentions:
-            #     all_self_attentions = all_self_attentions + (layer_outputs[1],)
-            #     if self.config.add_cross_attention:
-            #         all_cross_attentions = all_cross_attentions + (layer_outputs[2],)
 
         if self.emb_layer_norm_after:
             hidden_states = self.emb_layer_norm_after(hidden_states)
@@ -561,8 +482,6 @@ class Encoder(nn.Module):
                     hidden_states,
                     next_decoder_cache,
                     all_hidden_states,
-                    # all_self_attentions,
-                    # all_cross_attentions,
                 ]
                 if v is not None
             )
@@ -570,22 +489,16 @@ class Encoder(nn.Module):
             last_hidden_state=hidden_states,
             past_key_values=next_decoder_cache,
             hidden_states=all_hidden_states,
-            # attentions=all_self_attentions,
-            # cross_attentions=all_cross_attentions,
         )
 
 
-# Copied from transformers.models.bert.modeling_bert.BertPooler
 class Pooler(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        # self.activation = nn.Tanh()
         self.activation = nn.SiLU()
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        # We "pool" the model by simply taking the hidden state corresponding
-        # to the first token.
         first_token_tensor = hidden_states[:, 0]
         pooled_output = self.dense(first_token_tensor)
         pooled_output = self.activation(pooled_output)
@@ -593,22 +506,17 @@ class Pooler(nn.Module):
 
 
 class BasePreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
+    def __init__(self, config, *inputs, **kwargs):
+        super().__init__(config, *inputs, **kwargs)
+        self.config = config
 
     config_class = Config
     base_model_prefix = "bc_predictor"
     supports_gradient_checkpointing = True
     _no_split_modules = ["Layer"]
 
-    # Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel._init_weights
     def _init_weights(self, module):
-        """Initialize the weights"""
         if isinstance(module, nn.Linear):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
@@ -636,10 +544,6 @@ class Model(BasePreTrainedModel):
 
         self.post_init()
 
-    # def _set_gradient_checkpointing(self, module, value=False):
-    #     if isinstance(module, Encoder):
-    #         module.gradient_checkpointing = value
-
     def get_input_embeddings(self):
         return self.embeddings.word_embeddings
 
@@ -647,10 +551,6 @@ class Model(BasePreTrainedModel):
         self.embeddings.word_embeddings = value
 
     def _prune_heads(self, heads_to_prune):
-        """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
-        class PreTrainedModel
-        """
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
@@ -670,9 +570,6 @@ class Model(BasePreTrainedModel):
             output_hidden_states: Optional[bool] = None,
             return_dict: Optional[bool] = None,
     ):
-        # This is your existing Ntv2Model forward pass
-        # It should return a BaseModelOutputWithPastAndCrossAttentions
-        # or similar, which then feeds into the MLM head.
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -693,9 +590,7 @@ class Model(BasePreTrainedModel):
 
         if attention_mask is None:
             attention_mask = torch.ones((batch_size, seq_length), device=device)
-            # attention_mask = torch.ones(((batch_size, seq_length)), device=device)
 
-        # Ensure attention_mask has the correct shape for broadcasting (batch_size, 1, 1, seq_length)
         extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(
             attention_mask, input_shape, device
         )
@@ -703,9 +598,7 @@ class Model(BasePreTrainedModel):
         embedding_output = self.embeddings(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            # token_type_ids=token_type_ids,
             methylation_ids=methylation_ids,
-            # position_ids=position_ids,
             age_ids=age_ids,
             inputs_embeds=inputs_embeds,
         )
@@ -713,7 +606,6 @@ class Model(BasePreTrainedModel):
         encoder_outputs = self.encoder(
             embedding_output,
             attention_mask=extended_attention_mask,
-            # head_mask=head_mask,
             encoder_attention_mask=encoder_attention_mask,
             encoder_hidden_states=encoder_hidden_states,
             output_attentions=output_attentions,
@@ -724,7 +616,6 @@ class Model(BasePreTrainedModel):
 
         if self.pooler is not None:
             pooled_output = self.pooler(sequence_output)
-            # You can return this pooled_output directly or as part of a tuple/dictionary
             if not return_dict:
                 return (pooled_output,) + encoder_outputs[1:]
 
@@ -831,7 +722,6 @@ class LMHead(nn.Module):
         x = gelu(x)
         x = self.layer_norm(x)
 
-        # project back to size of vocabulary with bias
         x = self.decoder(x) + self.bias
         return x
 
@@ -851,7 +741,6 @@ class MaskedLM(BasePreTrainedModel):
         self.model = Model(config, add_pooling_layer=False)
         self.lm_head = LMHead(config)
 
-        # self.init_weights()
         self.post_init()
 
     def get_input_embeddings(self):
@@ -873,7 +762,7 @@ class MaskedLM(BasePreTrainedModel):
             encoder_hidden_states: Optional[torch.FloatTensor] = None,
             encoder_attention_mask: Optional[torch.Tensor] = None,
             labels: Optional[torch.LongTensor] = None,
-            output_attentions: Optional[bool] = None,  # hi
+            output_attentions: Optional[bool] = None,
             output_hidden_states: Optional[bool] = None,
             return_dict: Optional[bool] = None,
             methylation_ids: Optional[torch.Tensor] = None,
@@ -894,12 +783,9 @@ class MaskedLM(BasePreTrainedModel):
         outputs = self.model(
             input_ids,
             attention_mask=attention_mask,
-            # position_ids=position_ids,
-            # head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
-            # output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             methylation_ids=methylation_ids,
@@ -929,61 +815,6 @@ class MaskedLM(BasePreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-
-# class CancerClassificationModel(BasePreTrainedModel):
-#     def __init__(self, config):
-#         super().__init__(config)
-#         self.num_labels = config.num_labels
-#         self.model = HierarchicalGenomeTransformer(config)
-#         self.classifier = nn.Sequential(
-#             nn.Dropout(config.hidden_dropout_prob),
-#             nn.Linear(config.hidden_size, config.num_labels)
-#         )
-#         # self.loss_fct = BCEWithLogitsLoss()
-#         self.loss_fct = CrossEntropyLoss()
-#
-#     def forward(
-#             self,
-#             input_ids: Optional[torch.LongTensor] = None,
-#             attention_mask: Optional[torch.Tensor] = None,
-#             inputs_embeds: Optional[torch.FloatTensor] = None,
-#             encoder_hidden_states: Optional[torch.FloatTensor] = None,
-#             encoder_attention_mask: Optional[torch.Tensor] = None,
-#             labels: Optional[torch.LongTensor] = None,
-#             output_hidden_states: Optional[bool] = None,
-#             return_dict: Optional[bool] = None,
-#             methylation_ids: Optional[torch.Tensor] = None,
-#             age_ids: Optional[torch.Tensor] = None,
-#     ):
-#         return_dict = (
-#             return_dict if return_dict is not None else self.config.use_return_dict
-#         )
-#
-#         outputs = self.model(
-#             input_ids,
-#             attention_mask=attention_mask,
-#             inputs_embeds=inputs_embeds,
-#             encoder_hidden_states=encoder_hidden_states,
-#             encoder_attention_mask=encoder_attention_mask,
-#             output_hidden_states=output_hidden_states,
-#             return_dict=return_dict,
-#             methylation_ids=methylation_ids,
-#             age_ids=age_ids,
-#         )
-#         sequence_output = outputs.pooler_output
-#
-#         logits = self.classifier(sequence_output)
-#
-#         loss = None
-#         if labels is not None:
-#             loss = self.loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-#
-#         return SequenceClassifierOutput(
-#             loss=loss,
-#             logits=logits,
-#             hidden_states=outputs.hidden_states,
-#             attentions=outputs.attentions,
-#         )
 
 class CancerClassificationModel(PreTrainedModel):
     def __init__(self, config):
@@ -1026,7 +857,7 @@ class CancerClassificationModel(PreTrainedModel):
             age_ids=age_ids,
         )
         sequence_output = outputs.hidden_states[-1]
-        pooled_output = sequence_output[:, 0, :] # Grab the CLS token output
+        pooled_output = sequence_output[:, 0, :]
 
         logits = self.classifier(pooled_output)
 
@@ -1040,4 +871,3 @@ class CancerClassificationModel(PreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-
