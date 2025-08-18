@@ -16,8 +16,8 @@ MODEL_PATH = "/home/alanf/scratch/breastCancerDataset/SURE2025-CancerML/dummy_mo
 # Paths to your finetuning data files
 TRAIN_CANCER_FILE = "/home/alanf/scratch/breastCancerDataset/scripts/cohorts/breast_cancer_discovery_runs.txt"
 TRAIN_HEALTHY_FILE = "/home/alanf/scratch/breastCancerDataset/scripts/cohorts/healthy_discovery_runs.txt"
-EVAL_CANCER_FILE = "/home/alanf/scratch/breastCancerDataset/scripts/cohorts/breast_cancer_discovery_runs.txt"
-EVAL_HEALTHY_FILE = "/home/alanf/scratch/breastCancerDataset/scripts/cohorts/healthy_discovery_runs.txt"
+EVAL_CANCER_FILE = "/home/alanf/scratch/breastCancerDataset/scripts/cohorts/breast_cancer_validation_runs.txt"
+EVAL_HEALTHY_FILE = "/home/alanf/scratch/breastCancerDataset/scripts/cohorts/healthy_validation_runs.txt"
 
 def compute_metrics(eval_pred):
     """Computes accuracy and AUC for the evaluation set."""
@@ -86,12 +86,13 @@ def main():
         eval_strategy="epoch",  # Evaluate at the end of each epoch
         save_strategy="epoch",  # Save checkpoint at the end of each epoch
         load_best_model_at_end=True, # Load the best model at the end of training
-        per_device_train_batch_size=8,
-        per_device_eval_batch_size=8,
+        per_device_train_batch_size=32,
+        per_device_eval_batch_size=32,
         num_train_epochs=3,
         learning_rate=2e-5,
         logging_dir="/home/alanf/scratch/breastCancerDataset/finetune_outputs/finetune_logs",
         logging_steps=100,
+        bf16=True,
         report_to="none",
     )
 
