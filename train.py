@@ -43,13 +43,13 @@ train_dataset = LineByLineTextDataset(
 
 
 training_args = TrainingArguments(
-    output_dir="./results",
+    output_dir="/home/alanf/scratch/breastCancerDataset/scripts/pretrainresults",
     overwrite_output_dir=True,
     num_train_epochs=3,
     per_device_train_batch_size=8,
     save_steps=10_000,
     save_total_limit=2,
-    logging_dir="./logs",
+    logging_dir="/home/alanf/scratch/breastCancerDataset/scripts/pretrainlogs",
     logging_steps=500,
     report_to="none",
     learning_rate=5e-5,
@@ -90,5 +90,6 @@ print("Starting training.")
 trainer.train()
 print("Finished training.")
 
-trainer.save_model("./dummy_model")
-# tokenizer.save_pretrained("./dummy_model")
+trainer.save_model("/home/alanf/scratch/breastCancerDataset/scripts/dummy_model")
+# trainer.save_pretrained("/home/alanf/scratch/breastCancerDataset/scripts/dummy_model")
+print("Success??")
