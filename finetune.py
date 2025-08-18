@@ -14,8 +14,8 @@ from dataset import BCClassificationDataset
 # The path to your pre-trained model directory
 MODEL_PATH = "/home/alanf/scratch/breastCancerDataset/SURE2025-CancerML/dummy_model"
 # Paths to your finetuning data files
-TRAIN_CANCER_FILE = "/home/alanf/scratch/breastCancerDataset/scripts/cohorts/breast_cancer_discovery_runs.txt"
-TRAIN_HEALTHY_FILE = "/home/alanf/scratch/breastCancerDataset/scripts/cohorts/healthy_discovery_runs.txt"
+TRAIN_CANCER_FILE = "/home/alanf/scratch/breastCancerDataset/scripts/cohorts/breast_cancer_validation_runs.txt"
+TRAIN_HEALTHY_FILE = "/home/alanf/scratch/breastCancerDataset/scripts/cohorts/healthy_validation_runs.txt"
 EVAL_CANCER_FILE = "/home/alanf/scratch/breastCancerDataset/scripts/cohorts/breast_cancer_validation_runs.txt"
 EVAL_HEALTHY_FILE = "/home/alanf/scratch/breastCancerDataset/scripts/cohorts/healthy_validation_runs.txt"
 
