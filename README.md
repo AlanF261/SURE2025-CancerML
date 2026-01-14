@@ -8,4 +8,4 @@ Using Bismark, create a reference genome, align your fastq files, sort your fast
 
 Create .txt documents containing lists of filepaths for each of the following cohorts: discovery (for pretraining), healthy discovery, cancer discovery, healthy validation, and discovery validation. 
 
-Provide filepaths of these .txt documents in either pretrian.py or finetune.py.
+Provide filepaths of these .txt documents in either pretrain.py or finetune.py.
